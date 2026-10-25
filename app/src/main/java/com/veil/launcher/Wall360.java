@@ -64,9 +64,10 @@ final class Wall360 {
     private static final int MAX_BYTES = 30 * 1024 * 1024;
 
     private static volatile boolean running;
+    /** The lowest-level reason the last pull produced nothing (read by AerialExpander). */
+    private static volatile String lastPullDetail;
 
     private final Context app;
-    private final PrefsStore prefs;
     private final Callback cb;
     private final Handler main = new Handler(Looper.getMainLooper());
     /** The lowest-level reason a picture was skipped — surfaced into the toast. */
@@ -74,7 +75,6 @@ final class Wall360 {
 
     private Wall360(Context ctx, Callback cb) {
         this.app = ctx.getApplicationContext();
-        this.prefs = new PrefsStore(this.app);
         this.cb = cb;
     }
 
@@ -88,10 +88,36 @@ final class Wall360 {
         new Wall360(ctx, cb).run();
     }
 
+    /**
+     * Synchronous pull on the CALLER's thread — the aerial expander's last-chance fallback
+     * already runs on its own worker and folds the result into its own callback. Returns the
+     * number of pictures added into {@code stock} (named {@code prefix<id>.jpg}); 0 with the
+     * reason in {@link #lastPullDetail} when the network gave up.
+     */
+    static int pullInto(Context ctx, File stock, String prefix, String cid, int batch) {
+        lastPullDetail = null;
+        Wall360 w = new Wall360(ctx, null);
+        try {
+            return w.pullSync(stock, prefix, cid, batch);
+        } catch (SocketTimeoutException e) {
+            Log.w(TAG, "pull timed out: " + e.getMessage());
+            lastPullDetail = String.valueOf(e.getMessage());
+            return 0;
+        } catch (Exception e) {
+            Log.w(TAG, "pull failed: " + e);
+            lastPullDetail = String.valueOf(e.getMessage());
+            return 0;
+        }
+    }
+
+    /** Why {@link #pullInto} last added nothing; null when nothing was even attempted. */
+    static String lastPullDetail() {
+        return lastPullDetail;
+    }
+
     private void run() {
         new Thread(() -> {
             int added = 0, total = 0;
-            long bytes = 0;
             String error = null;
             detail = null;
             try {
@@ -101,61 +127,10 @@ final class Wall360 {
                 if (!stock.exists() && !stock.mkdirs()) throw new IllegalStateException("mkdir failed");
                 File[] have = stock.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
                 total = have == null ? 0 : have.length;
-                java.util.Set<String> names = new java.util.HashSet<>();
-                if (have != null) for (File f : have) names.add(f.getName());
-
-                String cid = prefs.loadW360Cat();
-                // A probe call reads the category's real size, then the window itself lands on
-                // a RANDOM page: repeated taps keep bringing fresh pictures instead of the
-                // same first page over and over.
-                JSONObject probe = fetchPage(cid, 0, 1);
-                int catalog = 3000;
-                if (probe != null) {
-                    try { catalog = Integer.parseInt(probe.optString("total", "3000")); }
-                    catch (NumberFormatException bad) { catalog = 3000; }
-                }
-                if (catalog < 1) catalog = 1;
-                if (catalog > 50_000) catalog = 50_000;
-                int start = catalog <= BATCH
-                        ? 0 : (int) (Math.random() * (catalog - BATCH));
-
-                JSONObject page = fetchPage(cid, start, BATCH + 30);
-                JSONArray data = page == null ? null : page.optJSONArray("data");
-                if (data == null || data.length() == 0) {
-                    throw new IllegalStateException("empty list for category " + cid);
-                }
-                for (int i = 0; i < data.length() && added < BATCH && bytes < MAX_BYTES; i++) {
-                    JSONObject item = data.optJSONObject(i);
-                    if (item == null) continue;
-                    String id = item.optString("id", "");
-                    String url = item.optString("url", "");
-                    if (id.isEmpty() || url.isEmpty()) continue;
-                    String name = "w360_" + id + ".jpg";
-                    if (names.contains(name)) continue;
-                    if (isPortrait(item.optString("resolution", ""))) continue;
-                    byte[] jpg = httpGet(url, 20_000);
-                    if (jpg == null || jpg.length < 20_000) {   // a real wallpaper is never tiny
-                        detail = "tiny or unreadable: " + url;
-                        continue;
-                    }
-                    BitmapFactory.Options bounds = new BitmapFactory.Options();
-                    bounds.inJustDecodeBounds = true;
-                    BitmapFactory.decodeByteArray(jpg, 0, jpg.length, bounds);
-                    if (bounds.outWidth <= 0) {                 // the CDN handed back an error page
-                        detail = "not an image: " + url;
-                        error = ERR_DECODE;
-                        continue;
-                    }
-                    try (FileOutputStream fo = new FileOutputStream(new File(stock, name))) {
-                        fo.write(jpg);
-                    }
-                    names.add(name);
-                    added++;
-                    bytes += jpg.length;
-                }
+                added = pullSync(stock, "w360_", new PrefsStore(app).loadW360Cat(), BATCH);
+                if (added == 0 && error == null) error = ERR_EMPTY;
                 File[] after = stock.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
                 total = after == null ? total : after.length;
-                if (added == 0 && error == null) error = ERR_EMPTY;
             } catch (SocketTimeoutException e) {
                 Log.w(TAG, "expand timed out: " + e.getMessage());
                 detail = String.valueOf(e.getMessage());
@@ -171,6 +146,65 @@ final class Wall360 {
                 main.post(() -> cb.onDone(fAdded, fTotal, fError, fDetail));
             }
         }).start();
+    }
+
+    /**
+     * The core, synchronous: probe the category's size, land on a RANDOM page window (repeated
+     * taps keep bringing fresh pictures instead of the same first page), then download until
+     * {@code batch} new pictures are saved. Skips already-pulled ids (deduped by file name) and
+     * portrait pictures; validates every download (JPEG bounds) before it counts. Throws on a
+     * dead network; skips with a note in {@link #detail}.
+     */
+    private int pullSync(File stock, String prefix, String cid, int batch) throws Exception {
+        detail = null;
+        File[] have = stock.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
+        java.util.Set<String> names = new java.util.HashSet<>();
+        if (have != null) for (File f : have) names.add(f.getName());
+        int added = 0;
+        long bytes = 0;
+        JSONObject probe = fetchPage(cid, 0, 1);
+        int catalog = 3000;
+        if (probe != null) {
+            try { catalog = Integer.parseInt(probe.optString("total", "3000")); }
+            catch (NumberFormatException bad) { catalog = 3000; }
+        }
+        if (catalog < 1) catalog = 1;
+        if (catalog > 50_000) catalog = 50_000;
+        int start = catalog <= batch ? 0 : (int) (Math.random() * (catalog - batch));
+        JSONObject page = fetchPage(cid, start, batch + 30);
+        JSONArray data = page == null ? null : page.optJSONArray("data");
+        if (data == null || data.length() == 0) {
+            throw new IllegalStateException("empty list for category " + cid);
+        }
+        for (int i = 0; i < data.length() && added < batch && bytes < MAX_BYTES; i++) {
+            JSONObject item = data.optJSONObject(i);
+            if (item == null) continue;
+            String id = item.optString("id", "");
+            String url = item.optString("url", "");
+            if (id.isEmpty() || url.isEmpty()) continue;
+            String name = prefix + id + ".jpg";
+            if (names.contains(name)) continue;
+            if (isPortrait(item.optString("resolution", ""))) continue;
+            byte[] jpg = httpGet(url, 20_000);
+            if (jpg == null || jpg.length < 20_000) {   // a real wallpaper is never tiny
+                detail = "tiny or unreadable: " + url;
+                continue;
+            }
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(jpg, 0, jpg.length, bounds);
+            if (bounds.outWidth <= 0) {                 // the CDN handed back an error page
+                detail = "not an image: " + url;
+                continue;
+            }
+            try (FileOutputStream fo = new FileOutputStream(new File(stock, name))) {
+                fo.write(jpg);
+            }
+            names.add(name);
+            added++;
+            bytes += jpg.length;
+        }
+        return added;
     }
 
     /**

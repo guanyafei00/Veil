@@ -44,8 +44,15 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private float gradTop, gradBottom;
     /** The wallpaper as shown (null = plain background): the band frost crops from it. */
     private Bitmap wallpaper;
-    /** The whole-window frosted sheet (half resolution); null = render on next draw. */
+    /**
+     * The dock-region glass for the screen position it was rendered at (1/3 resolution).
+     * REAL-TIME: every frame whose position moved re-renders the band's own wallpaper area.
+     * Continuous movement produces continuous glass content — no settle-time jump, no stale
+     * print, and it follows the wallpaper's breathing zoom where a frozen sheet could not.
+     */
     private Bitmap frost;
+    private int frostX = Integer.MAX_VALUE, frostY = Integer.MAX_VALUE;
+    private int frostW = -1, frostH = -1;
     /** The dock frosted glass switch (owner's panel toggle): off falls back to the dark gradient. */
     private boolean frostEnabled = true;
     /** The last frost render failed (OOM): stop retrying per frame until the inputs change. */
@@ -85,10 +92,9 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         bandBitmap.setAlpha(a);
     }
 
-    /** Called by the desktop on scroll-state changes; the real blur waits for the settled frame. */
+    /** Called by the desktop on scroll-state changes; the per-frame region render needs no hint. */
     void setScrolling(boolean on) {
-        // The whole-window glass sheet made scroll-state tracking obsolete: the band samples its
-        // region per frame with no re-blur, so scrolling needs no special handling any more.
+        // Real-time region rendering tracks position by itself: nothing to do here.
     }
 
     DockDecoration(int dockSize, float density) {
@@ -160,28 +166,41 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             // The owner's pick: a solid colour instead of the gradient; the grain and hairline stay.
             band.setColor(tint);
         } else if (frostEnabled && wallpaper != null) {
-            // Frosted wallpaper (inspired by Tigris): the real wallpaper behind the band, blurred.
-            // The glass is rendered ONCE for the whole window (half resolution) per wallpaper;
-            // the band then samples its own region out of that sheet through the shader matrix
-            // (grid point gx maps to screen gx+loc, glass pixel (gx+loc)/2). Position-accurate
-            // while the band rides the scroll — no re-blur per frame, no brightness jumps, no
-            // stale print of an old position (both were the owner's flicker reports).
-            if (frost == null) {
-                android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
-                frost = FrostGlass.renderFull(wallpaper, dm.widthPixels, dm.heightPixels);
-                // A failed render (OOM) used to retry every frame: frost ↔ dark gradient
-                // alternation read as flicker. Stick with the fallback until the wallpaper changes.
-                frostFailed = frost == null;
+            // Frosted wallpaper (inspired by Tigris): the REAL wallpaper behind the band, blurred.
+            // The band's own region is re-rendered whenever its screen position moved (a band
+            // area at 1/3 resolution blurs in a couple of ms — cheap enough per frame), so the
+            // glass always shows the wallpaper currently under the dock: real-time, continuous
+            // while scrolling (no settle jump), and honest to the breathing wallpaper (no
+            // frozen sheet). An idle dock re-renders nothing (position unchanged).
+            if (!frostFailed) {
+                int[] loc = new int[2];
+                parent.getLocationOnScreen(loc);
+                int w = Math.round(rect.width()), h = Math.round(rect.height());
+                // 2-px quantisation: sub-pixel scroll jitter must not re-trigger the blur.
+                int gx = (loc[0] + Math.round(rect.left)) & ~1;
+                int gy = (loc[1] + Math.round(rect.top)) & ~1;
+                if (frost == null || w != frostW || h != frostH || gx != frostX || gy != frostY) {
+                    android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
+                    Bitmap nf = FrostGlass.renderRegion(wallpaper,
+                            dm.widthPixels, dm.heightPixels, gx, gy, w, h);
+                    if (nf != null) {
+                        if (frost != null) frost.recycle();
+                        frost = nf;
+                        frostX = gx; frostY = gy; frostW = w; frostH = h;
+                    } else {
+                        // A failed render (OOM) used to retry every frame: frost ↔ dark gradient
+                        // alternation read as flicker. Stick with the fallback until the
+                        // wallpaper changes.
+                        frostFailed = true;
+                    }
+                }
             }
             if (frost != null) {
                 applyBandAlpha();
-                int[] loc = new int[2];
-                parent.getLocationOnScreen(loc);
                 android.graphics.BitmapShader sh = new android.graphics.BitmapShader(
                         frost, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
                 android.graphics.Matrix m = new android.graphics.Matrix();
-                m.setScale(0.5f, 0.5f);
-                m.postTranslate(0.5f * loc[0], 0.5f * loc[1]);
+                m.setScale(3f, 3f);   // the glass is 1/3 resolution: stretch it back over the band
                 sh.setLocalMatrix(m);
                 bandBitmap.setShader(sh);
                 c.drawRoundRect(rect, radius, radius, bandBitmap);

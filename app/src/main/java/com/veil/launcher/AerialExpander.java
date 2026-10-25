@@ -164,6 +164,20 @@ final class AerialExpander {
                             error = null;
                         }
                     }
+                    // Last chance, and the one that actually works on the box: the 360 gallery
+                    // (scenery category) is plain HTTP from inside China, so it answers where
+                    // Apple's CDN and Wallhaven both stay unreachable. After this the expansion
+                    // has no dead end left: bundled stills offline, then clips, Wallhaven, 360.
+                    if (added == 0) {
+                        int got = Wall360.pullInto(app, stills, "aerial_", "9", BUNDLED_BATCH);
+                        if (got > 0) {
+                            added = got;
+                            error = null;
+                        } else if (error == null) {
+                            error = ERR_NET;
+                            detail = Wall360.lastPullDetail();
+                        }
+                    }
                 }
                 File[] after = stills.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
                 total = after == null ? total : after.length;
