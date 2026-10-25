@@ -142,11 +142,11 @@ final class AerialExpander {
                     Log.w(TAG, "clip produced nothing, trying another: " + url);
                     error = ERR_DECODE;
                 }
-                // The video path is a lost cause on some ROMs (stagefright quirks no container
-                // fix can reach): fall back to a plain still-photo source, which cannot fail to
-                // decode — the expansion ends with real pictures instead of a dead message.
-                if (added == 0 && !ERR_NET.equals(error) && !ERR_TIMEOUT.equals(error)
-                        && !ERR_EXHAUSTED.equals(error)) {
+                // The video path can also be a dead end for reasons no container fix reaches: the
+                // box may not reach Apple's CDN at all (DNS/TLS), or stagefright may refuse the
+                // clip. Whatever the cause, a still-photo source from a DIFFERENT domain gets its
+                // own chance — the expansion should end with real pictures, not a dead message.
+                if (added == 0) {
                     int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
                     if (got > 0) {
                         added = got;

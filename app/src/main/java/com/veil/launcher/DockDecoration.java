@@ -53,12 +53,15 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private boolean scrolling;
     /** The dock frosted glass switch (owner's panel toggle): off falls back to the dark gradient. */
     private boolean frostEnabled = true;
+    /** The last frost render failed (OOM): stop retrying per frame until the inputs change. */
+    private boolean frostFailed;
     private final Paint bandBitmap = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
     /** Called when the wallpaper is (re)decoded: the next draw re-renders the frost. */
     void setWallpaperBitmap(Bitmap bmp) {
         wallpaper = bmp;
         frost = null;
+        frostFailed = false;
     }
 
     /** The dock-bar frosted glass on/off; off drops the cached crop so the gradient shows. */
@@ -168,13 +171,24 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             int[] loc = new int[2];
             parent.getLocationOnScreen(loc);
             screenRect.offset(loc[0], loc[1]);
-            if (frost == null || !frostRect.equals(screenRect)) {
+            // Re-render ONLY when the band's SIZE changes or the wallpaper changed — never on
+            // position changes. The dock row rides the grid, so its rect moves on every scroll
+            // frame; re-sampling the wallpaper at each new position made the band's brightness
+            // jump darker then back mid-scroll (the owner's flicker report). A frozen sample
+            // drawn at the moving rect reads as one stable pane of glass.
+            boolean sizeChanged = Math.abs(frostRect.width() - screenRect.width()) > 1
+                    || Math.abs(frostRect.height() - screenRect.height()) > 1;
+            if (!frostFailed && (frost == null || sizeChanged)) {
                 if (!scrolling || frost == null) {
                     // Settled (or the first draw): the real blur. Mid-scroll the last crop is kept
                     // and stretched — a blurred band stays blurred, and a 1 GB box stays smooth.
                     frostRect.set(screenRect);
                     android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
                     frost = FrostGlass.render(wallpaper, frostRect, dm.widthPixels, dm.heightPixels);
+                    // A failed render (OOM) used to retry every frame: frost ↔ dark gradient
+                    // alternation read as flicker. Stick with the fallback until the wallpaper
+                    // (or the size) changes.
+                    frostFailed = frost == null;
                 }
             }
             if (frost != null) {
