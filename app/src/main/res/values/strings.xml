@@ -204,7 +204,7 @@
     <string name="aerial_res">Aerial still resolution</string>
     <string name="aerial_res_auto">Follow the display</string>
     <string name="aerial_res_done">Aerial still resolution saved</string>
-    <string name="aerial_expand_msg">Downloads one fresh aerial clip from Apple\'s stream (~50-80 MB) and files a few stills into the library. One clip per tap.</string>
+    <string name="aerial_expand_msg">Releases fresh stills from the bundled aerial library first (offline, instant); once that pool runs out, new frames are pulled from Apple\'s stream when the network allows.</string>
     <string name="aerial_expand_go">Expand</string>
     <string name="aerial_expanding">Expanding…</string>
     <string name="aerial_expand_done">Added %1$d, library now %2$d</string>

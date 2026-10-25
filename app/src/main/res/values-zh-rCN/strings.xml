@@ -176,7 +176,7 @@
     <string name="aerial_res">航拍图库分辨率</string>
     <string name="aerial_res_auto">自动识别</string>
     <string name="aerial_res_done">航拍图库分辨率已保存</string>
-    <string name="aerial_expand_msg">将从 Apple 视频流下载一段新航拍（约 50-80MB），抽取数张静图存入图库。每次一段，换着来。</string>
+    <string name="aerial_expand_msg">优先从内置航拍图库释放新静图（无需网络，立即可见）；内置释放完后，网络可用时再从 Apple 视频流补充抽取。</string>
     <string name="aerial_expand_go">开始扩充</string>
     <string name="aerial_expanding">扩充中…</string>
     <string name="aerial_expand_done">新增 %1$d 张，图库共 %2$d 张</string>

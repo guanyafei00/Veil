@@ -301,6 +301,15 @@ final class PrefsStore {
         sp.edit().putBoolean("wallpaper_reset", reset).apply();
     }
 
+    /** How many of the APK's bundled aerial stills have already been released into the gallery. */
+    int loadBundledReleased() {
+        return sp.getInt("aerial_bundled_released", 0);
+    }
+
+    void saveBundledReleased(int count) {
+        sp.edit().putInt("aerial_bundled_released", count).apply();
+    }
+
     /** Apple aerial wallpaper rotation: show the next cached still every time the desktop starts. */
     boolean isAerialRotateOn() {
         return sp.getBoolean(KEY_AERIAL_ROTATE, false);

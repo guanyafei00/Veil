@@ -61,6 +61,8 @@ final class AerialExpander {
     private static final String ENTRIES_URL = "https://sylvan.apple.com/Aerials/2x/entries.json";
     /** Clips tried per pass: one dead URL must not eat the whole run. */
     private static final int MAX_TRIES = 3;
+    /** Bundled stills released per tap while the shipped pool lasts. */
+    private static final int BUNDLED_BATCH = 6;
     private static final Pattern NUM = Pattern.compile("aerial_(\\d+)\\.jpg");
 
     /** Error codes handed back with onDone; the settings panel maps them to its own strings. */
@@ -118,41 +120,53 @@ final class AerialExpander {
                 boolean want4k = res == 2160
                         || (res == 0 && Math.max(dm.widthPixels, dm.heightPixels) >= 3000);
 
-                for (int tries = 0; tries < MAX_TRIES; tries++) {
-                    boolean mode4k = want4k;
-                    String url = null;
-                    if (want4k) {
-                        url = pick4kClip();
-                        if (url == null) mode4k = false;   // no live 4K clip: the 1080p playlist takes over
+                // Bundled stills first: 24 frames pre-extracted from Apple clips ship inside the
+                // APK, so a tap ALWAYS adds pictures — instantly, offline. The box's network to
+                // Apple's CDN proved unreliable (TLS/DNS from Android 7), and Wallhaven is not
+                // reachable from every network either; the bundled pool cannot fail. Once it is
+                // exhausted, the network paths take over as the supplement.
+                int released = releaseBundledStills(stills, nextIndex(have) + added, BUNDLED_BATCH);
+                if (released > 0) {
+                    added = released;
+                } else {
+                    for (int tries = 0; tries < MAX_TRIES; tries++) {
+                        boolean mode4k = want4k;
+                        String url = null;
+                        if (want4k) {
+                            url = pick4kClip();
+                            if (url == null) mode4k = false;   // no live 4K clip: the 1080p playlist takes over
+                        }
+                        if (url == null) url = pickClip();
+                        if (url == null) {
+                            if (error == null) error = ERR_EXHAUSTED;
+                            break;
+                        }
+                        int got = grabFrames(url, stills, nextIndex(have) + added, mode4k);
+                        if (got > 0) {
+                            // Only a clip that actually produced stills counts as used.
+                            prefs.addAerialUsedUrl(baseName(url));
+                            added += got;
+                            error = null;
+                            break;
+                        }
+                        // This clip failed (dead URL, no frames): keep its playlist slot and try the next.
+                        Log.w(TAG, "clip produced nothing, trying another: " + url);
+                        error = ERR_DECODE;
                     }
-                    if (url == null) url = pickClip();
-                    if (url == null) {
-                        if (error == null) error = ERR_EXHAUSTED;
-                        break;
+                    // The video path can also be a dead end for reasons no container fix reaches: the
+                    // box may not reach Apple's CDN at all (DNS/TLS), or stagefright may refuse the
+                    // clip. Whatever the cause, a still-photo source from a DIFFERENT domain gets its
+                    // own chance — the expansion should end with real pictures, not a dead message.
+                    if (added == 0) {
+                        int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
+                        if (got > 0) {
+                            added = got;
+                            error = null;
+                        }
                     }
-                    int got = grabFrames(url, stills, nextIndex(have) + added, mode4k);
-                    if (got > 0) {
-                        // Only a clip that actually produced stills counts as used.
-                        prefs.addAerialUsedUrl(baseName(url));
-                        added += got;
-                        error = null;
-                        break;
-                    }
-                    // This clip failed (dead URL, no frames): keep its playlist slot and try the next.
-                    Log.w(TAG, "clip produced nothing, trying another: " + url);
-                    error = ERR_DECODE;
                 }
-                // The video path can also be a dead end for reasons no container fix reaches: the
-                // box may not reach Apple's CDN at all (DNS/TLS), or stagefright may refuse the
-                // clip. Whatever the cause, a still-photo source from a DIFFERENT domain gets its
-                // own chance — the expansion should end with real pictures, not a dead message.
-                if (added == 0) {
-                    int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
-                    if (got > 0) {
-                        added = got;
-                        error = null;
-                    }
-                }
+                File[] after = stills.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
+                total = after == null ? total : after.length;
             } catch (Exception e) {
                 Log.w(TAG, "expand failed: " + e);
                 detail = String.valueOf(e.getMessage());
@@ -164,6 +178,43 @@ final class AerialExpander {
                 main.post(() -> cb.onDone(fa, ft, fe, fd));
             }
         }, "aerial-expand").start();
+    }
+
+    /**
+     * Copies the next {@code batch} bundled stills (assets/aerial_still/b_NNN.jpg) into the
+     * gallery under the running aerial_N numbering. Returns how many were released; 0 when the
+     * shipped pool is exhausted (the network paths take over).
+     */
+    private int releaseBundledStills(File stills, int firstIndex, int batch) {
+        int released = 0;
+        try {
+            int idx = prefs.loadBundledReleased();
+            while (released < batch) {
+                InputStream in;
+                try {
+                    in = app.getAssets().open(String.format(java.util.Locale.US,
+                            "aerial_still/b_%03d.jpg", idx + 1));
+                } catch (IOException gone) {
+                    break;   // the bundled pool is exhausted
+                }
+                try (FileOutputStream fo = new FileOutputStream(new File(stills,
+                        String.format("aerial_%d.jpg", firstIndex + released)))) {
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+                } finally {
+                    in.close();
+                }
+                idx++;
+                released++;
+            }
+            if (released > 0) prefs.saveBundledReleased(idx);
+        } catch (Exception e) {
+            Log.w(TAG, "bundled release failed: " + e);
+            detail = "bundled: " + e.getMessage();
+            return released;
+        }
+        return released;
     }
 
     /**

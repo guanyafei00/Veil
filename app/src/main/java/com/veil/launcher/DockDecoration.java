@@ -44,13 +44,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private float gradTop, gradBottom;
     /** The wallpaper as shown (null = plain background): the band frost crops from it. */
     private Bitmap wallpaper;
-    /** The rendered frosted band and the rect it was rendered for; null = regenerate. */
+    /** The whole-window frosted sheet (half resolution); null = render on next draw. */
     private Bitmap frost;
-    private final RectF frostRect = new RectF();
-    /** The band's rect in screen coordinates (the wallpaper is mapped to the window, not the grid). */
-    private final RectF screenRect = new RectF();
-    /** True while the grid scrolls: the last crop is stretched instead of re-blurred every frame. */
-    private boolean scrolling;
     /** The dock frosted glass switch (owner's panel toggle): off falls back to the dark gradient. */
     private boolean frostEnabled = true;
     /** The last frost render failed (OOM): stop retrying per frame until the inputs change. */
@@ -92,7 +87,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
 
     /** Called by the desktop on scroll-state changes; the real blur waits for the settled frame. */
     void setScrolling(boolean on) {
-        scrolling = on;
+        // The whole-window glass sheet made scroll-state tracking obsolete: the band samples its
+        // region per frame with no re-blur, so scrolling needs no special handling any more.
     }
 
     DockDecoration(int dockSize, float density) {
@@ -165,44 +161,27 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             band.setColor(tint);
         } else if (frostEnabled && wallpaper != null) {
             // Frosted wallpaper (inspired by Tigris): the real wallpaper behind the band, blurred.
-            // The wallpaper fills the window, so the crop maps through the window's CENTER_CROP
-            // transform — in screen coordinates, not the grid's (the grid is inset from it).
-            screenRect.set(rect);
-            int[] loc = new int[2];
-            parent.getLocationOnScreen(loc);
-            screenRect.offset(loc[0], loc[1]);
-            // Re-render ONLY when the band's SIZE changes or the wallpaper changed — never on
-            // position changes. The dock row rides the grid, so its rect moves on every scroll
-            // frame; re-sampling the wallpaper at each new position made the band's brightness
-            // jump darker then back mid-scroll (the owner's flicker report). A frozen sample
-            // drawn at the moving rect reads as one stable pane of glass.
-            boolean sizeChanged = Math.abs(frostRect.width() - screenRect.width()) > 1
-                    || Math.abs(frostRect.height() - screenRect.height()) > 1;
-            if (!frostFailed && (frost == null || sizeChanged)) {
-                if (!scrolling || frost == null) {
-                    // Settled (or the first draw): the real blur. Mid-scroll the last crop is kept
-                    // and stretched — a blurred band stays blurred, and a 1 GB box stays smooth.
-                    frostRect.set(screenRect);
-                    android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
-                    frost = FrostGlass.render(wallpaper, frostRect, dm.widthPixels, dm.heightPixels);
-                    // A failed render (OOM) used to retry every frame: frost ↔ dark gradient
-                    // alternation read as flicker. Stick with the fallback until the wallpaper
-                    // (or the size) changes.
-                    frostFailed = frost == null;
-                }
+            // The glass is rendered ONCE for the whole window (half resolution) per wallpaper;
+            // the band then samples its own region out of that sheet through the shader matrix
+            // (grid point gx maps to screen gx+loc, glass pixel (gx+loc)/2). Position-accurate
+            // while the band rides the scroll — no re-blur per frame, no brightness jumps, no
+            // stale print of an old position (both were the owner's flicker reports).
+            if (frost == null) {
+                android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
+                frost = FrostGlass.renderFull(wallpaper, dm.widthPixels, dm.heightPixels);
+                // A failed render (OOM) used to retry every frame: frost ↔ dark gradient
+                // alternation read as flicker. Stick with the fallback until the wallpaper changes.
+                frostFailed = frost == null;
             }
             if (frost != null) {
                 applyBandAlpha();
-                // The blurred bitmap is square while the band is rounded: drawing it straight
-                // left the bitmap's dark square corners sticking out beyond the rounded corners
-                // (the owner's "dark gray right-angle spikes"). A BitmapShader + drawRoundRect
-                // clips it into the rounded shape with anti-aliased edges; the matrix maps
-                // bitmap → rect exactly where the crop was taken from.
+                int[] loc = new int[2];
+                parent.getLocationOnScreen(loc);
                 android.graphics.BitmapShader sh = new android.graphics.BitmapShader(
                         frost, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
                 android.graphics.Matrix m = new android.graphics.Matrix();
-                m.setScale(rect.width() / frost.getWidth(), rect.height() / frost.getHeight());
-                m.postTranslate(rect.left, rect.top);
+                m.setScale(0.5f, 0.5f);
+                m.postTranslate(0.5f * loc[0], 0.5f * loc[1]);
                 sh.setLocalMatrix(m);
                 bandBitmap.setShader(sh);
                 c.drawRoundRect(rect, radius, radius, bandBitmap);

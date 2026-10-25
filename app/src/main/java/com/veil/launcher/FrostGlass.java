@@ -39,32 +39,67 @@ final class FrostGlass {
             if (cw < 4 || ch < 4) return null;
 
             int halfW = Math.max(2, cw / 2), halfH = Math.max(2, ch / 2);
-            // RGB_565: the band is opaque and alpha-free, so half the bytes on a 1 GB box.
-            Bitmap cropped = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
-            Canvas c = new Canvas(cropped);
-            c.drawBitmap(wallpaper,
-                    new Rect(srcL, srcT, srcR, srcB),
-                    new Rect(0, 0, halfW, halfH), null);
-
-            // Two shrinking blurs read as glass at this size; band pixel output, half-res input.
-            int[] px = new int[halfW * halfH];
-            cropped.getPixels(px, 0, halfW, 0, 0, halfW, halfH);
-            px = boxBlur(px, halfW, halfH, 6);
-            px = boxBlur(px, halfW, halfH, 4);
-            cropped.setPixels(px, 0, halfW, 0, 0, halfW, halfH);
-
-            // Darken a little so white text on top stays readable, whatever the wallpaper is.
-            Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
-            Canvas oc = new Canvas(out);
-            oc.drawBitmap(cropped, 0, 0, null);
-            oc.drawColor(0x3A000000);
-            cropped.recycle();
+            Bitmap out = finishGlass(cropScaled(wallpaper, srcL, srcT, srcR, srcB, halfW, halfH));
             return out;
         } catch (Exception | OutOfMemoryError e) {
             // A wallpaper too big to crop (or OOM): the caller falls back to the painted gradient.
             android.util.Log.w("TvHome", "frost render failed: " + e);
             return null;
         }
+    }
+
+    /**
+     * Renders the frosted glass for the WHOLE window (half resolution): blur once per wallpaper,
+     * then every band position just samples its own region out of the cached sheet. This is what
+     * keeps the dock band position-accurate without ever re-blurring mid-scroll — a band-sized
+     * cache sampled at a fixed spot either flickered (re-render per settle) or showed a stale
+     * "print" of the wallpaper from its first position (the owner's report).
+     */
+    static Bitmap renderFull(Bitmap wallpaper, int viewW, int viewH) {
+        if (wallpaper == null || viewW <= 0 || viewH <= 0) return null;
+        try {
+            int wallW = wallpaper.getWidth(), wallH = wallpaper.getHeight();
+            float scale = Math.max(viewW / (float) wallW, viewH / (float) wallH);
+            float offX = (wallW * scale - viewW) / 2f, offY = (wallH * scale - viewH) / 2f;
+            int srcL = Math.max(0, Math.round(offX / scale));
+            int srcT = Math.max(0, Math.round(offY / scale));
+            int srcR = Math.min(wallW, Math.round((offX + viewW) / scale));
+            int srcB = Math.min(wallH, Math.round((offY + viewH) / scale));
+            int halfW = Math.max(2, viewW / 2), halfH = Math.max(2, viewH / 2);
+            return finishGlass(cropScaled(wallpaper, srcL, srcT, srcR, srcB, halfW, halfH));
+        } catch (Exception | OutOfMemoryError e) {
+            android.util.Log.w("TvHome", "frost full render failed: " + e);
+            return null;
+        }
+    }
+
+    /** CENTER_CROP-maps wallpaper region [srcL,T,R,B] into a halfW x halfH RGB_565 bitmap. */
+    private static Bitmap cropScaled(Bitmap wallpaper, int srcL, int srcT, int srcR, int srcB,
+                                     int halfW, int halfH) {
+        Bitmap cropped = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
+        Canvas c = new Canvas(cropped);
+        c.drawBitmap(wallpaper,
+                new Rect(srcL, srcT, srcR, srcB),
+                new Rect(0, 0, halfW, halfH), null);
+        return cropped;
+    }
+
+    /** Two box-blur passes + the readability darkening; consumes {@code cropped}. */
+    private static Bitmap finishGlass(Bitmap cropped) {
+        int halfW = cropped.getWidth(), halfH = cropped.getHeight();
+        int[] px = new int[halfW * halfH];
+        cropped.getPixels(px, 0, halfW, 0, 0, halfW, halfH);
+        px = boxBlur(px, halfW, halfH, 6);
+        px = boxBlur(px, halfW, halfH, 4);
+        cropped.setPixels(px, 0, halfW, 0, 0, halfW, halfH);
+
+        // Darken a little so white text on top stays readable, whatever the wallpaper is.
+        Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
+        Canvas oc = new Canvas(out);
+        oc.drawBitmap(cropped, 0, 0, null);
+        oc.drawColor(0x3A000000);
+        cropped.recycle();
+        return out;
     }
 
     /** In-place separable box blur (sliding window, O(n) per pass). */
