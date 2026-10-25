@@ -71,7 +71,7 @@ final class AerialExpander {
 
     /** Result of one run, on the main thread: added &gt; 0 with error == null on success. */
     interface Callback {
-        void onDone(int added, int total, String error);
+        void onDone(int added, int total, String error, String detail);
     }
 
     private static volatile boolean running;
@@ -80,6 +80,8 @@ final class AerialExpander {
     private final PrefsStore prefs;
     private final Callback cb;
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** The lowest-level reason the last clip produced nothing — surfaced into the toast. */
+    private volatile String detail;
 
     private AerialExpander(Context ctx, Callback cb) {
         this.app = ctx.getApplicationContext();
@@ -90,7 +92,7 @@ final class AerialExpander {
     /** Starts one expansion pass. Extra taps while a pass runs are ignored. */
     static void expand(Context ctx, Callback cb) {
         if (running) {
-            cb.onDone(0, 0, "busy");
+            cb.onDone(0, 0, "busy", null);
             return;
         }
         running = true;
@@ -101,6 +103,7 @@ final class AerialExpander {
         new Thread(() -> {
             int added = 0, total = 0;
             String error = null;
+            detail = null;
             try {
                 File dir = Config.dir(app);
                 if (dir == null) throw new IllegalStateException("no files dir");
@@ -139,16 +142,88 @@ final class AerialExpander {
                     Log.w(TAG, "clip produced nothing, trying another: " + url);
                     error = ERR_DECODE;
                 }
+                // The video path is a lost cause on some ROMs (stagefright quirks no container
+                // fix can reach): fall back to a plain still-photo source, which cannot fail to
+                // decode — the expansion ends with real pictures instead of a dead message.
+                if (added == 0 && !ERR_NET.equals(error) && !ERR_TIMEOUT.equals(error)
+                        && !ERR_EXHAUSTED.equals(error)) {
+                    int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
+                    if (got > 0) {
+                        added = got;
+                        error = null;
+                    }
+                }
             } catch (Exception e) {
                 Log.w(TAG, "expand failed: " + e);
+                detail = String.valueOf(e.getMessage());
                 error = classify(e);
             } finally {
                 running = false;
                 final int fa = added, ft = total;
-                final String fe = error;
-                main.post(() -> cb.onDone(fa, ft, fe));
+                final String fe = error, fd = detail;
+                main.post(() -> cb.onDone(fa, ft, fe, fd));
             }
         }, "aerial-expand").start();
+    }
+
+    /**
+     * Fallback still source when the video path yields nothing: Wallhaven's public search API
+     * (no key, SFW only) for aerial photographs. Plain JPEG downloads — nothing for the box's
+     * flaky video decoder to choke on — filed into the same aerials/ folder, so rotation picks
+     * them up like any other still. A random page each run keeps repeats rare.
+     */
+    private int fetchWallhavenStills(File stills, int firstIndex, boolean want4k) {
+        try {
+            int page = 1 + (int) (Math.random() * 5);
+            String api = "https://wallhaven.cc/api/v1/search?q=aerial&categories=100&purity=100"
+                    + "&atleast=1920x1080&sorting=random&page=" + page;
+            JSONObject root = new JSONObject(new String(fetchAll(api), "UTF-8"));
+            JSONArray data = root.optJSONArray("data");
+            if (data == null || data.length() == 0) {
+                detail = "wallhaven: no results";
+                return 0;
+            }
+            int saved = 0;
+            for (int i = 0; i < data.length() && saved < 3; i++) {
+                JSONObject o = data.getJSONObject(i);
+                String path = o.optString("path", "");
+                String res = o.optString("resolution", "");
+                int cut = res.indexOf('x');
+                if (cut > 0) {   // portrait shots would lose half the frame to the 16:9 crop
+                    try {
+                        if (Integer.parseInt(res.substring(0, cut)) < Integer.parseInt(res.substring(cut + 1)))
+                            continue;
+                    } catch (NumberFormatException bad) {
+                        // unparseable resolution: keep the candidate and let the decode check decide
+                    }
+                }
+                if (!path.toLowerCase(Locale.ROOT).endsWith(".jpg")) continue;
+                byte[] jpg = fetchAll(path);
+                if (jpg.length < 50_000) continue;
+                android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+                Bitmap bmp = android.graphics.BitmapFactory.decodeByteArray(jpg, 0, jpg.length, opts);
+                if (bmp == null || bmp.getWidth() < 1000) {
+                    if (bmp != null) bmp.recycle();
+                    continue;
+                }
+                Bitmap still = coverCrop(bmp, want4k ? STILL_W_4K : STILL_W, want4k ? STILL_H_4K : STILL_H);
+                bmp.recycle();
+                File out = new File(stills, String.format("aerial_%d.jpg", firstIndex + saved));
+                try (FileOutputStream fo = new FileOutputStream(out)) {
+                    still.compress(Bitmap.CompressFormat.JPEG, 85, fo);
+                } finally {
+                    still.recycle();
+                }
+                saved++;
+            }
+            if (saved > 0) Log.d(TAG, "wallhaven fallback: " + saved + " stills");
+            else detail = "wallhaven: nothing usable";
+            return saved;
+        } catch (Exception e) {
+            Log.w(TAG, "wallhaven fallback failed: " + e);
+            detail = "wallhaven: " + e.getMessage();
+            return 0;
+        }
     }
 
     /** Turns a thrown exception into one of the ERR_* codes the panel can explain. */
@@ -157,7 +232,8 @@ final class AerialExpander {
         String m = String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT);
         if (m.contains("timeout") || m.contains("timed out")) return ERR_TIMEOUT;
         if (m.contains("failed to connect") || m.contains("unreachable")
-                || m.contains("unknownhost") || m.startsWith("http 4") || m.startsWith("http 5")) {
+                || m.contains("unknownhost") || m.startsWith("http 4") || m.startsWith("http 5")
+                || m.contains("ssl") || m.contains("handshake") || m.contains("certificat")) {
             return ERR_NET;
         }
         return ERR_DECODE;
@@ -267,7 +343,7 @@ final class AerialExpander {
             try (InputStream in = c.getInputStream()) {
                 byte[] buf = new byte[8192];
                 int n;
-                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                while ((n = in.read(buf)) > 0 && bo.size() < 20 * 1024 * 1024) bo.write(buf, 0, n);
             }
             return bo.toByteArray();
         } finally {
@@ -292,15 +368,23 @@ final class AerialExpander {
             MediaMetadataRetriever mmr = new MediaMetadataRetriever();
             int saved = 0;
             try {
-                mmr.setDataSource(tmp.getAbsolutePath());
+                try {
+                    mmr.setDataSource(tmp.getAbsolutePath());
+                } catch (Exception e) {
+                    detail = "setDataSource: " + e;
+                    throw e;
+                }
                 for (long us : FRAME_US) {
                     Bitmap frame = null;
                     try {
                         frame = mmr.getFrameAtTime(us, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
                     } catch (Exception e) {
                         Log.w(TAG, "frame grab failed at " + us + ": " + e);
+                        detail = "frame @" + (us / 1_000_000L) + "s: " + e;
                     }
                     if (frame == null || frame.getWidth() < 400 || frame.getHeight() < 400) {
+                        if (detail == null && frame == null)
+                            detail = "frame @" + (us / 1_000_000L) + "s: retriever returned null";
                         if (frame != null) frame.recycle();
                         continue;
                     }

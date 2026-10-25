@@ -1176,7 +1176,7 @@ public class HomeSettingsActivity extends Activity {
         aerialExpandBusy = true;
         set(aerialExpandValue, getString(R.string.aerial_expanding));
         Toast.makeText(this, R.string.aerial_expanding, Toast.LENGTH_SHORT).show();
-        AerialExpander.expand(this, (added, total, error) -> {
+        AerialExpander.expand(this, (added, total, error, detail) -> {
             aerialExpandBusy = false;
             refreshValues();
             if (error != null) {
@@ -1187,7 +1187,10 @@ public class HomeSettingsActivity extends Activity {
                     case AerialExpander.ERR_EXHAUSTED: msgRes = R.string.aerial_expand_used_up; break;
                     default: msgRes = R.string.aerial_err_decode; break;
                 }
-                Toast.makeText(this, msgRes, Toast.LENGTH_LONG).show();
+                // The low-level reason rides along: a screenshot of this toast pins the failure.
+                String msg = detail == null || detail.isEmpty()
+                        ? getString(msgRes) : getString(msgRes) + "\n[" + detail + "]";
+                Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
             } else if (added > 0) {
                 Toast.makeText(this, getString(R.string.aerial_expand_done, added, total),
                         Toast.LENGTH_LONG).show();
