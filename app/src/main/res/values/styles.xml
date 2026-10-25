@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TvHome" parent="android:Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+
+    <!-- Settings rides over the live desktop as a half-screen panel (AT4K/Aerial style): the
+         window itself is translucent, so the desktop shows through the dimmed left half while
+         the right half carries the panel. The dim is a scrim view, not the window dimmer. -->
+    <style name="Theme.TvHome.Settings" parent="Theme.TvHome">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
+    <!-- Dialogs with hard-coded dark colours: some box ROMs (Phicomm N1) restyle the framework's
+         Material themes to light, which leaves our menu items as white text on a white dialog.
+         Explicit items here win over whatever the ROM did to the parent theme. -->
+    <style name="TvHomeDialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">#FF2A2A31</item>
+        <item name="android:colorBackground">#FF2A2A31</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.55</item>
+        <item name="android:textColorPrimary">#FFFFFFFF</item>
+        <item name="android:textColorSecondary">#B3FFFFFF</item>
+        <item name="android:textColorTertiary">#80FFFFFF</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+    </style>
+
+    <!-- Frosted pill, tvOS style. -->
+    <style name="TopButtonBase">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">42dp</item>
+        <item name="android:layout_marginStart">10dp</item>
+        <item name="android:paddingStart">16dp</item>
+        <item name="android:paddingEnd">20dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:background">@drawable/pill_bg</item>
+        <item name="android:textColor">@drawable/pill_text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:drawablePadding">9dp</item>
+        <item name="android:drawableTint">@drawable/pill_text</item>
+        <item name="android:focusable">true</item>
+        <item name="android:clickable">true</item>
+    </style>
+    <style name="TopButton" parent="TopButtonBase" />
+</resources>

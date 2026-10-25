@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Screensaver (AerialDream): a full-screen streaming aerial over a quiet corner clock.
+     Falls back to the drifting clock when the network or the video fails. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF000000">
+
+    <SurfaceView
+        android:id="@+id/aerialSurface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Fallback clock (shown when no video plays): the drifting clock, reused look. -->
+    <LinearLayout
+        android:id="@+id/aerialFallback"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:baselineAligned="true"
+        android:visibility="gone">
+
+        <TextClock
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:format12Hour="h:mm"
+            android:format24Hour="HH:mm"
+            android:textColor="#E6FFFFFF"
+            android:textSize="120sp"
+            android:fontFamily="sans-serif"
+            android:letterSpacing="-0.04"
+            android:includeFontPadding="false" />
+
+        <TextClock
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:format12Hour="a"
+            android:format24Hour=""
+            android:textColor="#99FFFFFF"
+            android:textSize="22sp"
+            android:fontFamily="sans-serif"
+            android:letterSpacing="0.08"
+            android:includeFontPadding="false" />
+    </LinearLayout>
+
+    <!-- Overlay over the video: a thin corner clock plus the place caption. -->
+    <LinearLayout
+        android:id="@+id/aerialOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="36dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:baselineAligned="true">
+
+            <TextClock
+                android:id="@+id/aerialClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="h:mm"
+                android:format24Hour="HH:mm"
+                android:shadowColor="#B3000000"
+                android:shadowRadius="14"
+                android:textColor="#E6FFFFFF"
+                android:textSize="56sp"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="-0.03"
+                android:includeFontPadding="false" />
+
+            <TextClock
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_gravity="bottom"
+                android:layout_marginBottom="8dp"
+                android:format12Hour="@string/date_format"
+                android:format24Hour="@string/date_format"
+                android:shadowColor="#B3000000"
+                android:shadowRadius="10"
+                android:textColor="#B3FFFFFF"
+                android:textSize="15sp"
+                android:fontFamily="sans-serif"
+                android:letterSpacing="0.12"
+                android:includeFontPadding="false" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/aerialCaption"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layout_marginStart="4dp"
+            android:maxWidth="900dp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:shadowColor="#B3000000"
+            android:shadowRadius="10"
+            android:textColor="#CCFFFFFF"
+            android:textSize="15sp"
+            android:fontFamily="sans-serif"
+            android:letterSpacing="0.04" />
+    </LinearLayout>
+</FrameLayout>

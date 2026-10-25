@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- All apps: four rounded tiles (adapted from AT4K's all-apps button). -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6,4 H9 A2,2 0 0 1 11,6 V9 A2,2 0 0 1 9,11 H6 A2,2 0 0 1 4,9 V6 A2,2 0 0 1 6,4 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,4 H18 A2,2 0 0 1 20,6 V9 A2,2 0 0 1 18,11 H15 A2,2 0 0 1 13,9 V6 A2,2 0 0 1 15,4 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6,13 H9 A2,2 0 0 1 11,15 V18 A2,2 0 0 1 9,20 H6 A2,2 0 0 1 4,18 V15 A2,2 0 0 1 6,13 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M15,13 H18 A2,2 0 0 1 20,15 V18 A2,2 0 0 1 18,20 H15 A2,2 0 0 1 13,18 V15 A2,2 0 0 1 15,13 Z" />
+</vector>

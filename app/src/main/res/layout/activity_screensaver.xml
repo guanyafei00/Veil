@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/saverRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF000000">
+
+    <!-- Two stacked pictures so the change is a crossfade; the front one slowly zooms. -->
+    <ImageView
+        android:id="@+id/saverImgA"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:alpha="0" />
+
+    <ImageView
+        android:id="@+id/saverImgB"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:alpha="0" />
+
+    <LinearLayout
+        android:id="@+id/saverClock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="44dp"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <TextView
+            android:id="@+id/saverTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFFFF"
+            android:textSize="60sp"
+            android:shadowColor="#99000000"
+            android:shadowRadius="12"
+            android:shadowDx="0"
+            android:shadowDy="2" />
+
+        <TextView
+            android:id="@+id/saverDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#CCFFFFFF"
+            android:textSize="17sp"
+            android:shadowColor="#99000000"
+            android:shadowRadius="8"
+            android:shadowDx="0"
+            android:shadowDy="1" />
+    </LinearLayout>
+</FrameLayout>
