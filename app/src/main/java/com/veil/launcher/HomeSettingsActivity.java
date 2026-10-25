@@ -715,6 +715,7 @@ public class HomeSettingsActivity extends Activity {
             Toast.makeText(this, R.string.wallpaper_failed, Toast.LENGTH_LONG).show();
             return;
         }
+        prefs.setWallpaperReset(true);   // keep plain black: the bundled wallpaper must not return
         Toast.makeText(this, R.string.wallpaper_removed, Toast.LENGTH_LONG).show();
     }
 

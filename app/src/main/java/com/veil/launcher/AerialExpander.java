@@ -336,9 +336,13 @@ final class AerialExpander {
      * Reshapes the head-only download into a file the retriever can open. If a complete moov
      * already sits at the front, the head is used as-is (its offsets are absolute and valid for
      * the prefix we have). Otherwise the moov is fetched from the tail, every chunk offset is
-     * rebased, and it is spliced in place of the mdat box header: [prefix][moov][mdat data],
-     * where the data starts mdatStart + moovSize instead of mdatStart + 8 — hence the
-     * delta = moovSize - 8 added to each offset.
+     * rebased, and it is spliced in before the media data: [prefix][moov][mdat box]. The mdat
+     * box header is RE-EMITTED — the raw payload cannot follow the moov headerless, because the
+     * retriever walks top-level atoms strictly and stops at the first garbage box. With the
+     * header back in place the data starts mdatStart + moovSize + 8 instead of
+     * mdatStart + hdrLen, hence the delta = moovSize + 8 - hdrLen on each offset. (A previous
+     * version spliced the payload headerless with delta = moovSize - 8: ffprobe tolerated it,
+     * but stagefright on the box silently found no frames — "downloaded fine, no pictures".)
      */
     private void makeFastStart(String url, File raw, File out) throws Exception {
         byte[] probe = new byte[PROBE_BYTES];
@@ -352,6 +356,7 @@ final class AerialExpander {
             }
         }
         long mdatStart = -1, mdatSize = 0, moovAt = -1, moovSize = 0;
+        int mdatHdrLen = 8;
         int off = 0;
         while (off + 8 <= got) {
             long size = u32(probe, off) & 0xFFFFFFFFL;
@@ -359,7 +364,11 @@ final class AerialExpander {
             if (size == 1 && off + 16 <= got) size = u64(probe, off + 8);
             if (size < 8) break;
             if ("moov".equals(typ)) { moovAt = off; moovSize = size; break; }
-            if ("mdat".equals(typ)) { mdatStart = off; mdatSize = size; }
+            if ("mdat".equals(typ)) {
+                mdatStart = off;
+                mdatSize = size;
+                mdatHdrLen = (u32(probe, off) & 0xFFFFFFFFL) == 1 ? 16 : 8;
+            }
             off += (int) size;
         }
         // Fast-start source (a complete moov inside the downloaded head): the raw file is a
@@ -389,8 +398,9 @@ final class AerialExpander {
         if (mOff < 0 || mSize > tail.length - mOff) throw new IOException("moov not found at tail");
         byte[] moov = new byte[(int) mSize];
         System.arraycopy(tail, mOff, moov, 0, (int) mSize);
-        patchChunkOffsets(moov, 8, moov.length, mSize - 8);
-        // Splice: prefix + patched moov + media data (raw minus the 8-byte mdat box header).
+        patchChunkOffsets(moov, 8, moov.length, mSize + 8 - mdatHdrLen);
+        // Splice: prefix + patched moov + a fresh mdat box header + the media payload.
+        long payload = raw.length() - mdatStart - mdatHdrLen;
         try (java.io.FileInputStream in = new java.io.FileInputStream(raw);
              FileOutputStream fo = new FileOutputStream(out)) {
             byte[] buf = new byte[65536];
@@ -402,12 +412,16 @@ final class AerialExpander {
                 remaining -= r;
             }
             fo.write(moov);
-            long skip = 8;
+            long boxSize = payload + 8;
+            fo.write(new byte[]{
+                    (byte) (boxSize >> 24), (byte) (boxSize >> 16), (byte) (boxSize >> 8), (byte) boxSize,
+                    'm', 'd', 'a', 't'});
+            long skip = mdatHdrLen;
             while (skip > 0) skip -= in.skip(skip);
             int n;
             while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
         }
-        Log.d(TAG, "fast-start rebuilt: moov " + mSize + "B spliced at " + mdatStart);
+        Log.d(TAG, "fast-start rebuilt: moov " + mSize + "B + mdat " + payload + "B at " + mdatStart);
     }
 
     /** Range-GETs up to {@code max} bytes from {@code start} (the moov hunt at the tail). */

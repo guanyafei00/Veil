@@ -46,6 +46,7 @@ final class PrefsStore {
     private static final String KEY_ICON_RADIUS = "icon_radius";
     private static final String KEY_BING_WALLPAPER = "bing_wallpaper";
     private static final String KEY_BING_DATE = "bing_wallpaper_date";
+    private static final String KEY_BING_STOCK_DATE = "bing_stock_date";
     private static final String KEY_AERIAL_ROTATE = "aerial_rotate";
     private static final String KEY_AERIAL_INDEX = "aerial_wallpaper_index";
     private static final String KEY_AERIAL_INTERVAL = "aerial_interval_min";
@@ -258,7 +259,7 @@ final class PrefsStore {
 
     /** Icon corner rounding as a percent (0 = square, 50 = circle) of the icon's shorter side. */
     int loadIconRadius() {
-        return sp.getInt(KEY_ICON_RADIUS, 0);
+        return sp.getInt(KEY_ICON_RADIUS, 15);   // small rounded corners out of the box
     }
 
     void saveIconRadius(int percent) {
@@ -280,6 +281,24 @@ final class PrefsStore {
 
     void saveBingDate(String date) {
         sp.edit().putString(KEY_BING_DATE, date).apply();
+    }
+
+    /** The last day the multi-market stock backfill ran (it repeats once a day). */
+    String loadBingStockDate() {
+        return sp.getString(KEY_BING_STOCK_DATE, "");
+    }
+
+    void saveBingStockDate(String date) {
+        sp.edit().putString(KEY_BING_STOCK_DATE, date).apply();
+    }
+
+    /** The owner explicitly went back to plain black: never re-adopt the bundled wallpaper. */
+    boolean isWallpaperReset() {
+        return sp.getBoolean("wallpaper_reset", false);
+    }
+
+    void setWallpaperReset(boolean reset) {
+        sp.edit().putBoolean("wallpaper_reset", reset).apply();
     }
 
     /** Apple aerial wallpaper rotation: show the next cached still every time the desktop starts. */

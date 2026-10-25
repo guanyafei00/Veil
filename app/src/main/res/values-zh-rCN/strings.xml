@@ -95,6 +95,7 @@
     <string name="scan_upload_hint">用手机扫描二维码，或在浏览器打开\n%1$s\n选择图片上传，5 分钟内有效</string>
     <string name="scan_upload_done">已收到新壁纸，回到桌面即生效</string>
     <string name="scan_upload_fail">上传服务启动失败，请确认电视已连上 Wi-Fi</string>
+    <string name="bing_stock_done">必应图库已扩充至 %1$d 张</string>
     <string name="panel_system_settings">系统设置</string>
     <string name="panel_top_bar">状态栏背景</string>
     <string name="panel_top_text">状态栏文字颜色</string>

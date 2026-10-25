@@ -330,6 +330,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         COLUMNS = prefs.loadColumns(defaultColumns);   // the owner's dock-size pick (settings panel)
         applyAppearance();
         applyTimeFormat();
+        adoptBundledWallpaper();
 
         grid = findViewById(R.id.grid);
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS));
@@ -1007,7 +1008,41 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         builtDockBarOn = dockBarOn;
     }
 
+    /**
+     * First run with no wallpaper of any kind: adopt the bundled aerial-style still (a lone
+     * island in a calm sea) instead of the plain black background. Runs once — as soon as the
+     * wallpaper file exists, or any rotation source takes over, this never copies again.
+     */
+    private void adoptBundledWallpaper() {
+        io.execute(() -> {
+            try {
+                File dir = Config.dir(this);
+                if (dir == null) return;
+                File wall = new File(dir, Config.WALLPAPER_NAME);
+                if (wall.isFile() || prefs.isWallpaperReset()) return;
+                try (java.io.InputStream in = getAssets().open("default_wallpaper.jpg");
+                     java.io.FileOutputStream fo = new java.io.FileOutputStream(wall)) {
+                    byte[] buf = new byte[16384];
+                    int n;
+                    while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+                }
+                android.util.Log.d("TvHome", "bundled wallpaper adopted");
+                postUi(MainActivity.this::refreshWallpaper);
+            } catch (Exception e) {
+                android.util.Log.d("TvHome", "bundled wallpaper copy skipped: " + e);
+            }
+        });
+    }
+
     // ---- Bing daily wallpaper (inspired by Tigris): one fetch a day into the stock folder --------
+
+    /** Stock size the multi-market backfill aims for; one pass adds at most up to this. */
+    private static final int BING_STOCK_TARGET = 48;
+    /** Markets whose daily pictures differ; 8 days each, deduped into one shared stock. */
+    private static final String[] BING_MARKETS = {
+            "zh-CN", "en-US", "ja-JP", "en-GB", "de-DE", "fr-FR", "zh-TW",
+            "en-IN", "en-CA", "en-AU", "pt-BR", "it-IT", "ru-RU", "ko-KR", "es-ES",
+    };
 
     /**
      * On resume, once a day: pull Bing's picture of the day into files/bing/ as stock (the
@@ -1051,7 +1086,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
-    /** Backfills the stock with the last 8 days of Bing pictures when the rotation is switched on thin. */
+    /**
+     * Backfills the Bing stock across Bing's MARKETS: the archive API only serves the last
+     * ~8 days per market, but every market picks its own pictures — so one pass over 15
+     * markets yields dozens of unique images instead of the 9 the single-market API shows.
+     * Deduped by urlbase (globally unique per picture), capped per pass so a slow network
+     * cannot stall the resume; the whole pass repeats at most once a day.
+     */
     private void maybeFillBingStock() {
         if (!prefs.isBingWallpaperOn()) return;
         io.execute(() -> {
@@ -1060,28 +1101,48 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 if (dir == null) return;
                 File stock = new File(dir, "bing");
                 File[] have = stock.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
-                if (have != null && have.length >= 4) return;   // stock is healthy already
-                String api = httpGet("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8");
-                if (api == null) return;
-                org.json.JSONArray images = new org.json.JSONObject(api).getJSONArray("images");
+                int count = have == null ? 0 : have.length;
+                String today = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
+                        .format(new java.util.Date());
+                if (count >= BING_STOCK_TARGET && today.equals(prefs.loadBingStockDate())) return;
                 if (!stock.exists() && !stock.mkdirs()) return;
+                java.util.Set<String> names = new java.util.HashSet<>();
+                if (have != null) for (File f : have) names.add(f.getName());
                 int saved = 0;
-                for (int i = 0; i < images.length(); i++) {
-                    org.json.JSONObject img = images.getJSONObject(i);
-                    String path = img.optString("url", "");
-                    String end = img.optString("enddate", "");
-                    if (path.isEmpty() || end.isEmpty()) continue;
-                    File out = new File(stock, "bing_" + end + ".jpg");
-                    if (out.isFile() && out.length() > 10_000) continue;   // already have that day
-                    byte[] jpg = fetchBingPicture(img, path);
-                    if (jpg == null || jpg.length < 10_000) continue;
-                    try (java.io.FileOutputStream fo = new java.io.FileOutputStream(out)) {
-                        fo.write(jpg);
+                for (String mkt : BING_MARKETS) {
+                    if (count + saved >= BING_STOCK_TARGET) break;
+                    String api = httpGet("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=" + mkt);
+                    if (api == null) continue;
+                    org.json.JSONArray images;
+                    try {
+                        images = new org.json.JSONObject(api).getJSONArray("images");
+                    } catch (Exception bad) {
+                        continue;   // a market answering an error page just contributes nothing
                     }
-                    saved++;
+                    for (int i = 0; i < images.length() && count + saved < BING_STOCK_TARGET; i++) {
+                        org.json.JSONObject img = images.getJSONObject(i);
+                        String urlbase = img.optString("urlbase", "");
+                        String path = img.optString("url", "");
+                        if (urlbase.isEmpty() || path.isEmpty()) continue;
+                        String name = "bing_"
+                                + urlbase.substring(urlbase.lastIndexOf('/') + 1).replace('?', '_')
+                                + ".jpg";
+                        if (names.contains(name)) continue;
+                        byte[] jpg = fetchBingPicture(img, path);
+                        if (jpg == null || jpg.length < 10_000) continue;
+                        try (java.io.FileOutputStream fo = new java.io.FileOutputStream(new File(stock, name))) {
+                            fo.write(jpg);
+                        }
+                        names.add(name);
+                        saved++;
+                    }
                 }
+                prefs.saveBingStockDate(today);
+                final int total = count + saved;
                 if (saved > 0) {
-                    android.util.Log.d("TvHome", "bing stock backfilled: " + saved);
+                    android.util.Log.d("TvHome", "bing stock backfilled: " + saved + " -> " + total);
+                    postUi(() -> Toast.makeText(this,
+                            getString(R.string.bing_stock_done, total), Toast.LENGTH_SHORT).show());
                     postUi(MainActivity.this::refreshWallpaper);
                 }
             } catch (Exception e) {
@@ -1331,8 +1392,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         aerialWasOn = aerialOn;
         // The Bing rotation switched on in the panel: backfill a thin stock, rotate right away.
+        // Also backfills while the switch is already on: the multi-market pass repeats at most
+        // once a day and tops the stock up to target, so the visible count keeps growing.
         boolean bingRotateOn = prefs.isBingRotateOn();
-        if (bingRotateOn && !bingWasOn) {
+        if (bingRotateOn) {
             io.execute(() -> {
                 maybeFillBingStock();
                 if (maybeRotateBingWallpaper()) postUi(MainActivity.this::refreshWallpaper);

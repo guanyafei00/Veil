@@ -123,6 +123,7 @@
     <string name="scan_upload_hint">Scan the QR code with your phone, or open\n%1$s\nin a browser, then pick a picture. Valid for 5 minutes.</string>
     <string name="scan_upload_done">Wallpaper received — applied on the desktop</string>
     <string name="scan_upload_fail">Could not start the upload service. Check that the TV is on your Wi-Fi network.</string>
+    <string name="bing_stock_done">Bing stock expanded to %1$d pictures</string>
     <string name="panel_system_settings">System settings</string>
     <string name="panel_top_bar">Status bar background</string>
     <string name="panel_top_text">Status bar text colour</string>
