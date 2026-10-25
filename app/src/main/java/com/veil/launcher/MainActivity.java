@@ -1154,7 +1154,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Bing stock rotation: the next cached picture into the wallpaper slot on the chosen cadence. */
     private boolean maybeRotateBingWallpaper() {
         if (!prefs.isBingWallpaperOn() || !prefs.isBingRotateOn()) return false;
-        if (prefs.isAerialRotateOn()) return false;   // the aerial rotation owns the slot
+        if (prefs.isAerialRotateOn() || prefs.isW360RotateOn()) return false;   // another rotation owns the slot
         long now = System.currentTimeMillis();
         long interval = prefs.loadBingIntervalMin() * 60_000L;
         if (interval < 5 * 60_000L) interval = 5 * 60_000L;   // the stated floor
@@ -1180,6 +1180,39 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return true;
         } catch (Exception e) {
             android.util.Log.d("TvHome", "bing rotate failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** 360 gallery rotation: the next cached picture into the wallpaper slot on the chosen cadence. */
+    private boolean maybeRotateW360Wallpaper() {
+        if (!prefs.isW360RotateOn()) return false;
+        if (prefs.isAerialRotateOn() || prefs.isBingRotateOn()) return false;   // another rotation owns the slot
+        long now = System.currentTimeMillis();
+        long interval = prefs.loadW360IntervalMin() * 60_000L;
+        if (interval < 5 * 60_000L) interval = 5 * 60_000L;   // the stated floor
+        if (now - prefs.loadW360LastAt() < interval) return false;
+        if (!rotateW360Once()) return false;   // a failed copy retries on the next tick
+        prefs.saveW360LastAt(now);
+        return true;
+    }
+
+    /** Copies the next cached 360 stock picture over the wallpaper slot. True when the file changed. */
+    private boolean rotateW360Once() {
+        try {
+            File base = Config.dir(this);
+            if (base == null) return false;
+            File[] stock = new File(base, "w360").listFiles((d, name) -> name.toLowerCase().endsWith(".jpg"));
+            if (stock == null || stock.length == 0) return false;
+            java.util.Arrays.sort(stock);
+            File next = stock[(prefs.loadW360Index() & 0x7fffffff) % stock.length];
+            File out = new File(base, Config.WALLPAPER_NAME);
+            copyFile(next, out);
+            prefs.saveW360Index(prefs.loadW360Index() + 1);
+            android.util.Log.d("TvHome", "w360 wallpaper -> " + next.getName());
+            return true;
+        } catch (Exception e) {
+            android.util.Log.d("TvHome", "w360 rotate failed: " + e.getMessage());
             return false;
         }
     }
@@ -1402,6 +1435,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
         }
         bingWasOn = bingRotateOn;
+        // The 360 rotation switched on in the panel: rotate right away instead of waiting a day.
+        if (prefs.isW360RotateOn()) {
+            io.execute(() -> {
+                if (maybeRotateW360Wallpaper()) postUi(MainActivity.this::refreshWallpaper);
+            });
+        }
         refreshWallpaper();
         // Back from an app: the content preview for the app we just left is written now.
         PreviewCapture.stopAndSave();
@@ -1785,7 +1824,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void run() {
                 // The copy and the stamp writes are IO (multi-model review P0): off the main thread.
                 io.execute(() -> {
-                    boolean changed = maybeRotateAerialWallpaper() || maybeRotateBingWallpaper();
+                    boolean changed = maybeRotateAerialWallpaper()
+                            || maybeRotateBingWallpaper() || maybeRotateW360Wallpaper();
                     if (changed) postUi(MainActivity.this::refreshWallpaper);
                 });
                 handler.postDelayed(this, 30_000L);   // a 5-minute minimum makes 30 s checks plenty

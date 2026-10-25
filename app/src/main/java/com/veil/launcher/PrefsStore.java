@@ -55,6 +55,12 @@ final class PrefsStore {
     private static final String KEY_BING_INTERVAL = "bing_interval_min";
     private static final String KEY_BING_LAST = "bing_last_at";
     private static final String KEY_BING_INDEX = "bing_index";
+    // The 360 gallery (Wall360): category pick + rotation state, mirroring the Bing keys.
+    private static final String KEY_W360_CAT = "w360_cat";
+    private static final String KEY_W360_ROTATE = "w360_rotate";
+    private static final String KEY_W360_INTERVAL = "w360_interval_min";
+    private static final String KEY_W360_LAST = "w360_last_at";
+    private static final String KEY_W360_INDEX = "w360_index";
     private static final String KEY_AERIAL_USED_URLS = "aerial_used_urls";
     private static final String KEY_AERIAL_STILL_RES = "aerial_still_res";
     /** First page shows the dock row (off = pure wallpaper page, the dock apps join the grid). */
@@ -434,6 +440,50 @@ final class PrefsStore {
 
     void saveBingIndex(int index) {
         sp.edit().putInt(KEY_BING_INDEX, index).apply();
+    }
+
+    // ---- 360 gallery (Wall360): a China-reachable stock with an anime category -------------------
+
+    /** The chosen category id (defaults to anime, the owner's ask); see Wall360.CAT_IDS. */
+    String loadW360Cat() {
+        return sp.getString(KEY_W360_CAT, "26");
+    }
+
+    void saveW360Cat(String cid) {
+        sp.edit().putString(KEY_W360_CAT, cid).apply();
+    }
+
+    /** 360 stock rotation; mirrors the Bing keys and shares the same slot exclusivity. */
+    boolean isW360RotateOn() {
+        return sp.getBoolean(KEY_W360_ROTATE, false);
+    }
+
+    void setW360RotateOn(boolean on) {
+        sp.edit().putBoolean(KEY_W360_ROTATE, on).apply();
+    }
+
+    int loadW360IntervalMin() {
+        return sp.getInt(KEY_W360_INTERVAL, 1440);
+    }
+
+    void saveW360IntervalMin(int minutes) {
+        sp.edit().putInt(KEY_W360_INTERVAL, Math.max(5, minutes)).apply();
+    }
+
+    long loadW360LastAt() {
+        return sp.getLong(KEY_W360_LAST, 0L);
+    }
+
+    void saveW360LastAt(long t) {
+        sp.edit().putLong(KEY_W360_LAST, t).apply();
+    }
+
+    int loadW360Index() {
+        return sp.getInt(KEY_W360_INDEX, 0);
+    }
+
+    void saveW360Index(int index) {
+        sp.edit().putInt(KEY_W360_INDEX, index).apply();
     }
 
     /**

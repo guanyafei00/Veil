@@ -188,6 +188,10 @@
     <string name="aerial_err_decode">下载成功但解不出画面，再点一次换一段</string>
     <string name="bing_rotate">必应壁纸轮换</string>
     <string name="bing_rotate_on">必应轮换已开启：按所选间隔换图库里的必应旧图（右侧数字是已缓存张数）</string>
+    <string name="w360_gallery">360 图库分类</string>
+    <string name="w360_expand">360 图库扩充</string>
+    <string name="w360_expanding">正在拉取 360 图库…</string>
+    <string name="w360_rotate">360 图库轮换</string>
     <string name="dock_reset">恢复默认程序坞</string>
     <string name="dock_reset_done">程序坞已重置为默认五个应用</string>
     <string name="section_desk">桌面</string>

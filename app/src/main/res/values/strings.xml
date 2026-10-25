@@ -216,6 +216,10 @@
     <string name="aerial_err_decode">Downloaded, but no frames decoded — tap again for another</string>
     <string name="bing_rotate">Bing wallpaper rotation</string>
     <string name="bing_rotate_on">Bing rotation on: the cached Bing pictures rotate on the chosen cadence</string>
+    <string name="w360_gallery">360 gallery category</string>
+    <string name="w360_expand">360 gallery expand</string>
+    <string name="w360_expanding">Pulling from the 360 gallery…</string>
+    <string name="w360_rotate">360 gallery rotation</string>
     <string name="dock_reset">Reset dock to default</string>
     <string name="dock_reset_done">Dock reset: back to the built-in five apps</string>
     <string name="section_desk">Desktop</string>

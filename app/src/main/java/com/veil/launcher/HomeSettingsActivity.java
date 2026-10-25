@@ -65,6 +65,7 @@ public class HomeSettingsActivity extends Activity {
     // is null-guarded (a row that was never built simply has no live TextView).
     private TextView lockValue, lockServiceValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
             bingRotateValue, aerialExpandValue, aerialResValue,
+            w360CatValue, w360ExpandValue, w360RotateValue,
             dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
             topBarColorValue, topTextColorValue,
             screensaverValue, screensaverDelayValue, screensaverClockValue, previewValue;
@@ -360,6 +361,9 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.scan_upload), null, v -> showQrUpload());
         row(getString(R.string.aerial_expand), aerialExpandValue = new TextView(this), v -> showAerialExpandDialog());
         row(getString(R.string.bing_rotate), bingRotateValue = new TextView(this), v -> showBingIntervalDialog());
+        row(getString(R.string.w360_gallery), w360CatValue = new TextView(this), v -> showW360CatDialog());
+        row(getString(R.string.w360_expand), w360ExpandValue = new TextView(this), v -> showW360ExpandDialog());
+        row(getString(R.string.w360_rotate), w360RotateValue = new TextView(this), v -> showW360IntervalDialog());
     }
 
     private void buildScreensaverRows() {
@@ -498,6 +502,12 @@ public class HomeSettingsActivity extends Activity {
         int stockN = stock == null ? 0 : stock.length;
         set(bingRotateValue, prefs.isBingRotateOn()
                 ? intervalName(prefs.loadBingIntervalMin()) + " · " + stockN + " 张" : "关");
+        File[] w360 = base == null ? null : new File(base, "w360").listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
+        int w360N = w360 == null ? 0 : w360.length;
+        set(w360CatValue, Wall360.catName(prefs.loadW360Cat()));
+        set(w360ExpandValue, w360N + " 张");
+        set(w360RotateValue, prefs.isW360RotateOn()
+                ? intervalName(prefs.loadW360IntervalMin()) + " · " + w360N + " 张" : "关");
         if (prefs.isWeatherOn()) {
             org.json.JSONObject loc = prefs.loadWeatherLoc();
             String city = loc == null ? "" : loc.optString("city", "");
@@ -1119,6 +1129,7 @@ public class HomeSettingsActivity extends Activity {
                 boolean wasOff = !prefs.isAerialRotateOn();
                 prefs.setAerialRotateOn(true);
                 prefs.setBingRotateOn(false);   // the two rotations are mutually exclusive
+                prefs.setW360RotateOn(false);
                 prefs.saveAerialIntervalMin(mins[idx]);
                 prefs.saveAerialLastAt(0L);   // rotate right away: the pick shows at once
                 if (wasOff) Toast.makeText(this, R.string.aerial_on, Toast.LENGTH_SHORT).show();
@@ -1145,10 +1156,100 @@ public class HomeSettingsActivity extends Activity {
                 boolean wasOff = !prefs.isBingRotateOn();
                 prefs.setBingRotateOn(true);
                 prefs.setAerialRotateOn(false);   // the aerial rotation yields the slot
+                prefs.setW360RotateOn(false);     // so does the 360 rotation
                 prefs.saveBingIntervalMin(mins[idx]);
                 prefs.saveBingLastAt(0L);   // rotate right away: the pick shows at once
                 if (wasOff) Toast.makeText(this, R.string.bing_rotate_on, Toast.LENGTH_SHORT).show();
             }
+        });
+    }
+
+    // ---- 360 gallery (Wall360): category pick / one-tap expansion / rotation ---------------------
+
+    /** The 360 gallery category: which of the curated lists the next expansion pulls from. */
+    private void showW360CatDialog() {
+        String cid = prefs.loadW360Cat();
+        int curIdx = 0;
+        for (int i = 0; i < Wall360.CAT_IDS.length; i++) {
+            if (Wall360.CAT_IDS[i].equals(cid)) curIdx = i;
+        }
+        showOptions(getString(R.string.w360_gallery), Wall360.CAT_NAMES, curIdx, idx -> {
+            prefs.saveW360Cat(Wall360.CAT_IDS[idx]);
+            refreshValues();
+            Toast.makeText(this, "已选「" + Wall360.CAT_NAMES[idx] + "」", Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    /** One-tap 360 expansion: a random window of the chosen category, about 12 pictures a pass. */
+    private void showW360ExpandDialog() {
+        if (w360ExpandBusy) {
+            Toast.makeText(this, R.string.w360_expanding, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+                .setTitle(R.string.w360_expand)
+                .setMessage("从「" + Wall360.catName(prefs.loadW360Cat())
+                        + "」随机拉取一批壁纸（约 12 张），需要网络。继续？")
+                .setPositiveButton(android.R.string.ok, (d, w) -> expandW360Stock())
+                .setNegativeButton(android.R.string.cancel, null)
+                .create());
+    }
+
+    private boolean w360ExpandBusy;
+
+    private void expandW360Stock() {
+        w360ExpandBusy = true;
+        set(w360ExpandValue, getString(R.string.w360_expanding));
+        Wall360.expand(this, (added, total, error, detail) -> {
+            w360ExpandBusy = false;
+            refreshValues();
+            String msg;
+            if (error != null) {
+                String why;
+                switch (error) {
+                    case Wall360.ERR_TIMEOUT: why = "网络超时"; break;
+                    case Wall360.ERR_DECODE: why = "图片解码失败"; break;
+                    case Wall360.ERR_EMPTY: why = "没有拉到新图（可能都已拉取过）"; break;
+                    case "busy": why = "上一次拉取还在进行"; break;
+                    default: why = "网络连不上";
+                }
+                // The low-level reason rides along: a screenshot of this toast pins the failure.
+                msg = "360 图库拉取失败：" + why
+                        + (detail == null || detail.isEmpty() ? "" : "\n[" + detail + "]");
+            } else if (added > 0) {
+                msg = "新增 " + added + " 张，图库共 " + total + " 张";
+            } else {
+                msg = "没有拉到新图，稍后再试";
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+        });
+    }
+
+    /** 360 rotation cadence: the same picks as the aerial/Bing rotations, shared exclusivity. */
+    private void showW360IntervalDialog() {
+        final int[] mins = {0, 5, 15, 30, 60, 180, 720, 1440};
+        String[] names = {getString(R.string.aerial_off), getString(R.string.interval_5m),
+                getString(R.string.interval_15m), getString(R.string.interval_30m),
+                getString(R.string.interval_1h), getString(R.string.interval_3h),
+                getString(R.string.interval_12h), getString(R.string.interval_1d)};
+        int current = prefs.isW360RotateOn() ? prefs.loadW360IntervalMin() : 0;
+        int curIdx = 0;
+        for (int i = 0; i < mins.length; i++) {
+            if (mins[i] == current) curIdx = i;
+        }
+        showOptions(getString(R.string.w360_rotate), names, curIdx, idx -> {
+            if (mins[idx] == 0) {
+                prefs.setW360RotateOn(false);
+            } else {
+                boolean wasOff = !prefs.isW360RotateOn();
+                prefs.setW360RotateOn(true);
+                prefs.setAerialRotateOn(false);   // one rotation owns the wallpaper slot
+                prefs.setBingRotateOn(false);
+                prefs.saveW360IntervalMin(mins[idx]);
+                prefs.saveW360LastAt(0L);   // rotate right away: the pick shows at once
+                if (wasOff) Toast.makeText(this, "360 图库轮换已开启", Toast.LENGTH_SHORT).show();
+            }
+            refreshValues();
         });
     }
 
