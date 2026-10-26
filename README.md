@@ -15,13 +15,25 @@ tvOS 风格的 Android TV / 盒子桌面（launcher），干净、轻量、纯�
 - **天气时钟**：Open-Meteo 免费源，中文城市搜索
 - **应用管理**：文件夹 + 4 位密码锁、图标自定义与圆角、Dock 数量调节、隐藏应用
 - **屏保**：航拍/必应壁纸混池，交叉淡化 + 缩放防烧屏
-- 最低 **Android 6.0**（minSdk 23），APK 约 300KB，无第三方功能库
+- 最低 **Android 6.0**（minSdk 23），无第三方功能库
+
+## 两个安装包（按需选）
+
+| 包 | 体积 | 内容 |
+| --- | --- | --- |
+| **full** | 约 6.2 MB | 含 24 张预置航拍静图：航拍图库扩充**开箱即用、无需网络** |
+| **lite** | 约 0.5 MB | 不含预置图库，其余功能完全一致；航拍扩充走网络（360 图库，国内直连） |
+
+两个包包名相同（`com.veil.launcher`），可互相覆盖安装；首次安装哪个都行。
 
 ## 构建
 
 ```
-./gradlew assembleRelease
+./gradlew assembleFullRelease assembleLiteRelease
 ```
+
+产物：`app/build/outputs/apk/full/release/Veil-TV-full-release.apk`、
+`app/build/outputs/apk/lite/release/Veil-TV-lite-release.apk`。
 
 需要 JDK 17 与 Android SDK（compileSdk 34）。
 

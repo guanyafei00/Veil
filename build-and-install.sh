@@ -39,7 +39,9 @@ fi
 echo "Stock launcher: $STOCK_LAUNCHER"
 if [ "$STOCK_LAUNCHER" = none ]; then DISABLE_STOCK="echo stock launcher left alone"
 else DISABLE_STOCK="pm disable-user --user 0 $STOCK_LAUNCHER"; fi
-APK=app/build/outputs/apk/release/app-release.apk
+# The "full" flavour (with the bundled aerial stills). The "lite" flavour is the same app
+# without them (~0.5 MB) and lives in ../lite/release/.
+APK=app/build/outputs/apk/full/release/Veil-TV-full-release.apk
 "$PY" -I ../tools/b64push.py "$APK" /data/local/tmp/tvhome.apk
 printf '%s\n' \
   "pm install -r /data/local/tmp/tvhome.apk" \

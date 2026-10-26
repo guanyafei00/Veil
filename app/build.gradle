@@ -14,6 +14,24 @@ android {
         versionName '2.0'
     }
 
+    // Two packages, one codebase:
+    //   full — ships the 24 bundled aerial stills (app/src/full/assets/aerial_still, 5.5 MB): the
+    //          aerial expander ALWAYS works, offline, straight after the install.
+    //   lite — the same app without those stills: the APK drops back to ~0.5 MB and the aerial
+    //          expander goes to the network path (the 360 gallery, China-reachable).
+    // The owner's pick: the big package was too heavy to sideload. The stills live in the
+    // FLAVOR's asset folder (not excluded from main): that is the only way AGP keeps them out
+    // of the lite build (a flavor-level assets.exclude does not filter main's files).
+    flavorDimensions 'bundle'
+    productFlavors {
+        full {
+            dimension 'bundle'
+        }
+        lite {
+            dimension 'bundle'
+        }
+    }
+
     buildTypes {
         release {
             // R8 strips and optimises the code (AndroidX included): smaller APK, faster start on a slow TV CPU.
@@ -28,6 +46,16 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Clear product names: the sideloaded APKs are handed to the owner as Veil-TV-full.apk / Veil-TV-lite.apk.
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        def flavor = variant.productFlavors.collect { it.second }.join()
+        variant.outputs.forEach { output ->
+            output.outputFileName.set("Veil-TV-${flavor}-${variant.buildType}.apk")
+        }
     }
 }
 
