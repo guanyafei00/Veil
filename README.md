@@ -4,6 +4,19 @@ tvOS 风格的 Android TV / 盒子桌面（launcher），干净、轻量、纯�
 
 **基于 [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv)（MIT License）二次开发** —— 感谢原作者的出色底子，本项目在其基础上做了大量修复、功能增强与界面重制。
 
+## 下载（Releases）
+
+| 安装包 | 体积 | 说明 |
+| --- | --- | --- |
+| [Veil-TV-v2.0.0-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.0.0/Veil-TV-v2.0.0-full.apk) | 6.9 MB | 含 24 张预置航拍静图 + 真 4K（3840×2160）默认壁纸，航拍扩充离线可用 |
+| [Veil-TV-v2.0.0-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.0.0/Veil-TV-v2.0.0-lite.apk) | 0.6 MB | 不含预置航拍图库，功能完全一致，航拍扩充走网络（360 图库，国内直连） |
+
+```bash
+adb install -r Veil-TV-v2.0.0-lite.apk
+```
+
+两个包包名相同（`com.veil.launcher`），可互相覆盖安装。安装后在系统设置里把 Veil 设为默认桌面。
+
 ## 特性
 
 - **tvOS 风界面**：毛玻璃 Dock 与顶栏（壁纸实时取样模糊）、焦点缩放动画、三级设置菜单
