@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.wifi" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Only for the optional weather clock (Open-Meteo, no key); everything else stays offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Needed on Android 10 to read the Wi-Fi network name; granted over adb at install time. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Android 11+ package visibility: lets the launcher list the TV apps it shows as tiles, and the
+         apps that declare a module card (docs/specs/card.md). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="com.veil.launcher.category.DOCK_CARD" />
+        </intent>
+        <!-- The desktop lock (LockService) needs to see every other home app on the box,
+             Android 11 package visibility included. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:banner="@drawable/banner"
+        android:theme="@style/Theme.TvHome"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true"
+        android:localeConfig="@xml/locales_config">
+        <!-- usesCleartextTraffic: the 360 wallpaper API answers HTTP ONLY (no TLS on cdn.apc.360.cn).
+             Android 9+ silently blocks cleartext by default — every Wall360 request died with
+             "connection failed" before this flag, on networks where the API was in fact reachable. -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:clearTaskOnLaunch="true"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- Listed in the TV's own app list, so it can be opened from the stock home screen too. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <!-- No CATEGORY_LAUNCHER here on purpose: launchers hide HOME apps from their lists.
+                 The app-list entry is OpenFromListActivity below. -->
+        </activity>
+
+        <!-- App-list entry for launchers that hide HOME apps (phone-style CN boxes): forwards into
+             the desktop and finishes, so the desktop itself stays out of the app lists. -->
+        <activity
+            android:name=".OpenFromListActivity"
+            android:exported="true"
+            android:label="@string/desktop_entry"
+            android:icon="@mipmap/ic_launcher"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".HomeSettingsActivity"
+            android:exported="true"
+            android:theme="@style/Theme.TvHome.Settings"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+
+        <!-- The launcher's own screensaver (idle timeout, aerial stills + Bing picture). Started by
+             the home screen after the chosen idle minutes; never in the app lists or recents. -->
+        <activity
+            android:name=".ScreensaverActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:screenOrientation="landscape" />
+        <!-- Home button for remotes that send KEYCODE_ALL_APPS (Xiaomi). Opt-in: HOME_KEY_SERVICE=1
+             build-and-install.sh; see HomeKeyService. -->
+        <service
+            android:name=".HomeKeyService"
+            android:label="@string/home_key_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/home_key_service" />
+        </service>
+
+        <!-- Screensaver: pick it in Settings, or `settings put secure screensaver_components
+             com.veil.launcher/.ClockDream` over adb. -->
+        <service
+            android:name=".ClockDream"
+            android:label="@string/dream_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- The aerial screensaver (Aerial borrow): streams Apple's aerials, clock fallback. -->
+        <service
+            android:name=".AerialDream"
+            android:label="@string/dream_aerial"
+            android:exported="true"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <!-- The remote's Input button (KEYCODE_TV) opens the input switcher; see InputKeyService. -->
+        <service
+            android:name=".InputKeyService"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/input_key_service" />
+        </service>
+
+        <!-- Desktop lock: while "桌面锁定" is on, the system Settings app and the stock launchers
+             bounce back to this home screen; see LockService. -->
+        <service
+            android:name=".LockService"
+            android:label="@string/lock_service_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/lock_service" />
+        </service>
+    </application>
+</manifest>

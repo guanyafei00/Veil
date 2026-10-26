@@ -120,15 +120,29 @@ final class AerialExpander {
                 boolean want4k = res == 2160
                         || (res == 0 && Math.max(dm.widthPixels, dm.heightPixels) >= 3000);
 
+                // Source pick (the owner asked for a manual choice): "auto" runs the whole
+                // chain; any other value forces ONE path, skipping the bundled release too.
+                String source = prefs.loadAerialSource();
+                boolean auto = "auto".equals(source);
+
                 // Bundled stills first: 24 frames pre-extracted from Apple clips ship inside the
                 // APK, so a tap ALWAYS adds pictures — instantly, offline. The box's network to
                 // Apple's CDN proved unreliable (TLS/DNS from Android 7), and Wallhaven is not
                 // reachable from every network either; the bundled pool cannot fail. Once it is
                 // exhausted, the network paths take over as the supplement.
-                int released = releaseBundledStills(stills, nextIndex(have) + added, BUNDLED_BATCH);
+                int released = auto ? releaseBundledStills(stills, nextIndex(have) + added, BUNDLED_BATCH) : 0;
                 if (released > 0) {
                     added = released;
+                } else if ("wallhaven".equals(source)) {
+                    int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
+                    if (got > 0) added = got;
+                    else if (error == null) error = ERR_NET;
+                } else if ("w360".equals(source)) {
+                    int got = Wall360.pullInto(app, stills, "aerial_", "9", BUNDLED_BATCH);
+                    if (got > 0) added = got;
+                    else if (error == null) { error = ERR_NET; detail = Wall360.lastPullDetail(); }
                 } else {
+                    // "auto" after the bundled pool ran dry, or "apple" (video clips only).
                     for (int tries = 0; tries < MAX_TRIES; tries++) {
                         boolean mode4k = want4k;
                         String url = null;
@@ -157,7 +171,7 @@ final class AerialExpander {
                     // box may not reach Apple's CDN at all (DNS/TLS), or stagefright may refuse the
                     // clip. Whatever the cause, a still-photo source from a DIFFERENT domain gets its
                     // own chance — the expansion should end with real pictures, not a dead message.
-                    if (added == 0) {
+                    if (added == 0 && auto) {
                         int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
                         if (got > 0) {
                             added = got;
@@ -168,7 +182,7 @@ final class AerialExpander {
                     // (scenery category) is plain HTTP from inside China, so it answers where
                     // Apple's CDN and Wallhaven both stay unreachable. After this the expansion
                     // has no dead end left: bundled stills offline, then clips, Wallhaven, 360.
-                    if (added == 0) {
+                    if (added == 0 && auto) {
                         int got = Wall360.pullInto(app, stills, "aerial_", "9", BUNDLED_BATCH);
                         if (got > 0) {
                             added = got;

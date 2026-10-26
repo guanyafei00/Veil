@@ -189,6 +189,7 @@
     <string name="bing_rotate">必应壁纸轮换</string>
     <string name="bing_rotate_on">必应轮换已开启：按所选间隔换图库里的必应旧图（右侧数字是已缓存张数）</string>
     <string name="w360_gallery">360 图库分类</string>
+    <string name="aerial_source">航拍图源</string>
     <string name="w360_expand">360 图库扩充</string>
     <string name="w360_expanding">正在拉取 360 图库…</string>
     <string name="w360_rotate">360 图库轮换</string>

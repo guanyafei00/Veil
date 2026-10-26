@@ -64,7 +64,7 @@ public class HomeSettingsActivity extends Activity {
     // Values that refresh when a dialog changes a pref; rebuilt per category, so every access
     // is null-guarded (a row that was never built simply has no live TextView).
     private TextView lockValue, lockServiceValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
-            bingRotateValue, aerialExpandValue, aerialResValue,
+            bingRotateValue, aerialExpandValue, aerialResValue, aerialSourceValue,
             w360CatValue, w360ExpandValue, w360RotateValue,
             dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
             topBarColorValue, topTextColorValue,
@@ -357,6 +357,7 @@ public class HomeSettingsActivity extends Activity {
             Toast.makeText(this, on ? R.string.wallpaper_bing_off : R.string.wallpaper_bing_on, Toast.LENGTH_SHORT).show();
         });
         row(getString(R.string.wallpaper_aerial), aerialValue = new TextView(this), v -> showAerialIntervalDialog());
+        row(getString(R.string.aerial_source), aerialSourceValue = new TextView(this), v -> showAerialSourceDialog());
         row(getString(R.string.aerial_res), aerialResValue = new TextView(this), v -> showAerialResDialog());
         row(getString(R.string.scan_upload), null, v -> showQrUpload());
         row(getString(R.string.aerial_expand), aerialExpandValue = new TextView(this), v -> showAerialExpandDialog());
@@ -498,6 +499,7 @@ public class HomeSettingsActivity extends Activity {
                 ? intervalName(prefs.loadAerialIntervalMin()) + " · " + (stills == null ? 0 : stills.length) + " 张" : "关");
         set(aerialExpandValue, (stills == null ? 0 : stills.length) + " 张");
         set(aerialResValue, aerialResName());
+        set(aerialSourceValue, aerialSourceName(prefs.loadAerialSource()));
         File[] stock = base == null ? null : new File(base, "bing").listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
         int stockN = stock == null ? 0 : stock.length;
         set(bingRotateValue, prefs.isBingRotateOn()
@@ -1165,6 +1167,37 @@ public class HomeSettingsActivity extends Activity {
     }
 
     // ---- 360 gallery (Wall360): category pick / one-tap expansion / rotation ---------------------
+
+    /** Aerial expansion source: auto chain, or force ONE of the paths (the owner's ask). */
+    private void showAerialSourceDialog() {
+        final String[] ids = {"auto", "apple", "wallhaven", "w360"};
+        final String[] names = {
+                "自动（内置 → Apple 视频 → Wallhaven → 360）",
+                "仅 Apple 视频抽帧（需能连苹果 CDN）",
+                "仅 Wallhaven（国际源，盒子常被墙）",
+                "仅 360 图库（国内直连，最稳）",
+        };
+        String cur = prefs.loadAerialSource();
+        int curIdx = 0;
+        for (int i = 0; i < ids.length; i++) {
+            if (ids[i].equals(cur)) curIdx = i;
+        }
+        showOptions(getString(R.string.aerial_source), names, curIdx, idx -> {
+            prefs.saveAerialSource(ids[idx]);
+            refreshValues();
+            Toast.makeText(this, "航拍图源：" + names[idx], Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    /** Human name of an aerial source id for the row's value column. */
+    private String aerialSourceName(String source) {
+        switch (source) {
+            case "apple": return "仅 Apple 视频";
+            case "wallhaven": return "仅 Wallhaven";
+            case "w360": return "仅 360 图库";
+            default: return "自动";
+        }
+    }
 
     /** The 360 gallery category: which of the curated lists the next expansion pulls from. */
     private void showW360CatDialog() {

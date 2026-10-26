@@ -63,6 +63,8 @@ final class PrefsStore {
     private static final String KEY_W360_INDEX = "w360_index";
     private static final String KEY_AERIAL_USED_URLS = "aerial_used_urls";
     private static final String KEY_AERIAL_STILL_RES = "aerial_still_res";
+    /** Aerial expansion source: auto | apple | wallhaven | w360 (the owner's manual override). */
+    private static final String KEY_AERIAL_SOURCE = "aerial_source";
     /** First page shows the dock row (off = pure wallpaper page, the dock apps join the grid). */
     private static final String KEY_DOCK_VISIBLE = "dock_visible";
     /** Dock focus swaps the wallpaper for the focused app's own banner art (Apple TV style). */
@@ -517,6 +519,18 @@ final class PrefsStore {
     void saveAerialStillRes(int res) {
         int v = res == 2160 ? 2160 : res == 1080 ? 1080 : 0;
         sp.edit().putInt(KEY_AERIAL_STILL_RES, v).apply();
+    }
+
+    /**
+     * Aerial expansion source: "auto" runs the whole chain (bundled → Apple clips → Wallhaven →
+     * 360), the other picks force ONE path — the owner asked for a manual Wallhaven choice.
+     */
+    String loadAerialSource() {
+        return sp.getString(KEY_AERIAL_SOURCE, "auto");
+    }
+
+    void saveAerialSource(String source) {
+        sp.edit().putString(KEY_AERIAL_SOURCE, source).apply();
     }
 
     /** Dock edits live over the config defaults; this drops back to them (settings row). */
