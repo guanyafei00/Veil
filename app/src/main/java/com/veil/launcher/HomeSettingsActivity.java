@@ -347,8 +347,22 @@ public class HomeSettingsActivity extends Activity {
         });
     }
 
+    /**
+     * The wallpaper panel, grouped by source and ordered inside each group: pick → tune →
+     * fill. Three picture sources live here (aerial, Bing, the 360 gallery) and their rows used
+     * to be interleaved, which read as noise on the TV (the owner's report).
+     */
     private void buildWallpaperRows() {
         row(getString(R.string.panel_wallpaper), null, v -> showWallpaperDialog());
+        row(getString(R.string.scan_upload), null, v -> showQrUpload());
+
+        section(getString(R.string.sec_aerial));
+        row(getString(R.string.wallpaper_aerial), aerialValue = new TextView(this), v -> showAerialIntervalDialog());
+        row(getString(R.string.aerial_source), aerialSourceValue = new TextView(this), v -> showAerialSourceDialog());
+        row(getString(R.string.aerial_res), aerialResValue = new TextView(this), v -> showAerialResDialog());
+        row(getString(R.string.aerial_expand), aerialExpandValue = new TextView(this), v -> showAerialExpandDialog());
+
+        section(getString(R.string.sec_bing));
         row(getString(R.string.wallpaper_bing), bingValue = new TextView(this), v -> {
             boolean on = prefs.isBingWallpaperOn();
             prefs.setBingWallpaperOn(!on);
@@ -356,15 +370,28 @@ public class HomeSettingsActivity extends Activity {
             refreshValues();
             Toast.makeText(this, on ? R.string.wallpaper_bing_off : R.string.wallpaper_bing_on, Toast.LENGTH_SHORT).show();
         });
-        row(getString(R.string.wallpaper_aerial), aerialValue = new TextView(this), v -> showAerialIntervalDialog());
-        row(getString(R.string.aerial_source), aerialSourceValue = new TextView(this), v -> showAerialSourceDialog());
-        row(getString(R.string.aerial_res), aerialResValue = new TextView(this), v -> showAerialResDialog());
-        row(getString(R.string.scan_upload), null, v -> showQrUpload());
-        row(getString(R.string.aerial_expand), aerialExpandValue = new TextView(this), v -> showAerialExpandDialog());
         row(getString(R.string.bing_rotate), bingRotateValue = new TextView(this), v -> showBingIntervalDialog());
+
+        section(getString(R.string.sec_w360));
         row(getString(R.string.w360_gallery), w360CatValue = new TextView(this), v -> showW360CatDialog());
         row(getString(R.string.w360_expand), w360ExpandValue = new TextView(this), v -> showW360ExpandDialog());
         row(getString(R.string.w360_rotate), w360RotateValue = new TextView(this), v -> showW360IntervalDialog());
+    }
+
+    /**
+     * A group label between rows. Not focusable on purpose: the remote skips straight over it
+     * to the next real row instead of stopping on a heading.
+     */
+    private void section(String label) {
+        float d = getResources().getDisplayMetrics().density;
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextSize(13);
+        t.setTextColor(0xFF8E8E93);
+        t.setPadding((int) (22 * d), (int) (14 * d), 0, (int) (4 * d));
+        t.setFocusable(false);
+        t.setFocusableInTouchMode(false);
+        list.addView(t);
     }
 
     private void buildScreensaverRows() {
