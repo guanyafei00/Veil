@@ -166,6 +166,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private Set<String> hidden;
     /** Folders the owner created (AT4K-like); their apps are not shown as standalone tiles. */
     private List<Folder> folders;
+    /**
+     * The owner's own icon order for the free grid (the apps below the dock): package names in
+     * the order the owner arranged them. Apps NOT in this list keep their alphabetical place
+     * relative to each other and follow the owner's list — so a moved icon lands exactly where
+     * it was dropped, and an app installed later does not jump in front of the arrangement.
+     */
+    private List<String> iconOrder = Collections.emptyList();
+    /** The app the owner picked up (move mode), or null when nothing is being moved. */
+    private String movingPkg;
     private final boolean showHomeSettings;
     private final List<Entry> items = new ArrayList<>();
 
@@ -189,6 +198,98 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.favourites = dockApps;
         this.hidden = hiddenApps;
         this.folders = folders;
+    }
+
+    /**
+     * The owner's icon order for the free grid (the apps below the dock). The adapter sorts
+     * the free grid by this list; apps missing from it keep their alphabetical order and come
+     * after the owner's list, so a newly installed app never jumps into an arrangement the
+     * owner made on purpose.
+     */
+    void setIconOrder(List<String> order) {
+        this.iconOrder = order == null ? Collections.<String>emptyList() : order;
+    }
+
+    /**
+     * The app the owner picked up (move mode), or null. The picked-up tile is drawn faded so
+     * it reads as "in hand" while the remote walks to the target slot.
+     * <p>
+     * No notifyItemChanged here: rebinding the focused tile would cost the focus, and the
+     * desktop drives the fade on the view itself (see MainActivity.startMove).
+     */
+    void setMovingPkg(String pkg) {
+        movingPkg = pkg;
+    }
+
+    /** The position of an app by package name, or -1. */
+    int positionOfPkg(String pkg) {
+        if (pkg == null) return -1;
+        for (int i = 0; i < items.size(); i++) {
+            Entry e = items.get(i);
+            if (e.pkg != null && e.pkg.equals(pkg)) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * The group a tile belongs to: 0 = the dock row, 1 = folders, 2 = module cards,
+     * 3 = the free app grid. The owner's moves stay inside one group — an app cannot be
+     * dropped into the dock row (that is what "pin to dock" is for) or into a folder.
+     */
+    int groupAt(int position) {
+        if (position < 0 || position >= items.size()) return -1;
+        return groupOf(items.get(position));
+    }
+
+    /** The group of one entry (the sort order's first key). */
+    private int groupOf(Entry e) {
+        if (e.kind == Entry.APP && favourites.contains(e.pkg)) return dockRowShown ? 0 : 3;
+        if (e.kind == Entry.FOLDER) return 1;
+        if (e.kind == Entry.CARD) return 2;
+        return 3;
+    }
+
+    /** The app's place in the owner's icon order, or -1 when the owner never moved it. */
+    private int indexInIconOrder(String pkg) {
+        if (pkg == null || iconOrder.isEmpty()) return -1;
+        return iconOrder.indexOf(pkg);
+    }
+
+    /** True when the tile is a plain app (not a card, not a folder, not the home tile). */
+    boolean isPlainAppAt(int position) {
+        if (position < 0 || position >= items.size()) return false;
+        return items.get(position).kind == Entry.APP;
+    }
+
+    /**
+     * The free grid's apps in display order — the list the owner's icon order is written
+     * from. It is read off the sorted items, so it already reflects the current arrangement.
+     */
+    List<String> freeGridPackages() {
+        List<String> out = new ArrayList<>();
+        for (Entry e : items) {
+            if (groupOf(e) == 3 && e.kind == Entry.APP && e.pkg != null) out.add(e.pkg);
+        }
+        return out;
+    }
+
+    /**
+     * The first and last position of the free grid (the apps below the dock, the folders and
+     * the module cards). The owner's move mode keeps the focus inside this range, so a stray
+     * Right or Up cannot walk the remote out of the grid and into the top bar.
+     */
+    int freeGridStart() {
+        for (int i = 0; i < items.size(); i++) {
+            if (groupOf(items.get(i)) == 3) return i;
+        }
+        return -1;
+    }
+
+    int freeGridEnd() {
+        for (int i = items.size() - 1; i >= 0; i--) {
+            if (groupOf(items.get(i)) == 3) return i;
+        }
+        return -1;
     }
 
     /**
@@ -274,14 +375,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     ctx.getDrawable(R.drawable.ic_folder), caption, 0, f));
         }
         Collections.sort(fresh, (a, b) -> {
-            // Group order: dock apps, folders, module cards, then the alphabetical grid. With the
-            // dock row hidden the pinned apps fall back into the alphabetical group instead.
-            int ga = a.kind == Entry.APP && favourites.contains(a.pkg) ? (dockRowShown ? 0 : 3)
-                    : a.kind == Entry.FOLDER ? 1
-                    : a.kind == Entry.CARD ? 2 : 3;
-            int gb = b.kind == Entry.APP && favourites.contains(b.pkg) ? (dockRowShown ? 0 : 3)
-                    : b.kind == Entry.FOLDER ? 1
-                    : b.kind == Entry.CARD ? 2 : 3;
+            // Group order: dock apps, folders, module cards, then the free app grid. With the
+            // dock row hidden the pinned apps fall back into the free grid instead.
+            int ga = groupOf(a);
+            int gb = groupOf(b);
             if (ga != gb) return Integer.compare(ga, gb);
             if (ga == 0) {
                 int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
@@ -297,6 +394,17 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                     if (fa < 0) return 1;
                     if (fb < 0) return -1;
                     return Integer.compare(fa, fb);
+                }
+            }
+            if (ga == 3) {
+                // The owner's own arrangement wins over the alphabet. Apps the owner never
+                // moved keep their alphabetical order and follow the arranged ones, so a new
+                // app shows up at the end of the grid instead of inside the arrangement.
+                int oa = indexInIconOrder(a.pkg), ob = indexInIconOrder(b.pkg);
+                if (oa >= 0 || ob >= 0) {
+                    if (oa < 0) return 1;
+                    if (ob < 0) return -1;
+                    return Integer.compare(oa, ob);
                 }
             }
             return a.label.compareToIgnoreCase(b.label);
@@ -365,6 +473,11 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             }
             h.card.setBackground(plate);
         }
+        // Move mode: the picked-up tile fades out (it is "in hand"). The drop target needs no
+        // extra paint — the desktop's glass highlight already sits on the focused tile, which
+        // IS the target.
+        boolean isMoving = movingPkg != null && movingPkg.equals(e.pkg);
+        h.card.setAlpha(isMoving ? 0.3f : 1f);
         if (e.banner != null) {
             h.banner.setImageDrawable(e.banner);
             h.banner.setVisibility(View.VISIBLE);

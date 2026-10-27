@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Needed on Android 10 to read the Wi-Fi network name; granted over adb at install time. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- The long-press "delete app" action starts the system uninstaller for another package.
+         Without this permission Android 11+ refuses the request outright. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <!-- Android 11+ package visibility: lets the launcher list the TV apps it shows as tiles, and the
          apps that declare a module card (docs/specs/card.md). -->
@@ -88,6 +91,16 @@
             android:theme="@style/Theme.TvHome.Settings"
             android:taskAffinity=""
             android:excludeFromRecents="true" />
+
+        <!-- The wallpaper gallery: one source's picture pool, seen and picked from. It is a
+             full-screen activity of its own — a wallpaper needs room to be judged. -->
+        <activity
+            android:name=".WallpaperGalleryActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TvHome"
+            android:screenOrientation="landscape" />
 
         <!-- The launcher's own screensaver (idle timeout, aerial stills + Bing picture). Started by
              the home screen after the chosen idle minutes; never in the app lists or recents. -->

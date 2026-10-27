@@ -56,6 +56,16 @@
     <string name="long_press_hide">Hide app</string>
     <string name="long_press_show">Show app again</string>
     <string name="long_press_info">App info</string>
+    <string name="long_press_move">Move to another position</string>
+    <string name="long_press_delete">Delete app</string>
+    <string name="move_hint">Pick the app up: walk the remote to the wanted slot, OK drops it there, Back puts it back</string>
+    <string name="move_done">Moved: %1$s</string>
+    <string name="move_cancelled">Move cancelled</string>
+    <string name="move_bad_target">An app can only be dropped onto another app icon</string>
+    <string name="move_failed">Could not move the icon</string>
+    <string name="delete_confirm_msg">%1$s will be uninstalled from this box. The system asks for the confirmation.</string>
+    <string name="delete_confirm_yes">Delete</string>
+    <string name="delete_no_uninstaller">This box has no uninstaller — remove it from the system settings</string>
     <string name="panel_title">Launcher settings</string>
     <string name="settings_back_hint">Press Back for the categories</string>
     <string name="backup">Back up settings</string>
@@ -221,6 +231,21 @@
     <string name="sec_aerial">AERIAL WALLPAPERS</string>
     <string name="sec_bing">BING WALLPAPERS</string>
     <string name="sec_w360">360 GALLERY</string>
+    <string name="sec_diag">DIAGNOSTICS</string>
+
+    <!-- The wallpaper gallery: one source's picture pool, seen and picked from. -->
+    <string name="gallery_open">Picture gallery</string>
+    <string name="gallery_count">%1$d pictures</string>
+    <string name="gallery_previous">Previous</string>
+    <string name="gallery_next">Next</string>
+    <string name="gallery_apply">Set as wallpaper</string>
+    <string name="gallery_close">Close</string>
+    <string name="gallery_empty">No pictures in this library yet — expand it first</string>
+    <string name="gallery_applied">Wallpaper set: %1$s</string>
+    <string name="gallery_apply_failed">Could not write the wallpaper</string>
+
+    <string name="net_check">Wallpaper source network check</string>
+    <string name="net_check_running">Checking the picture sources…</string>
     <string name="w360_expand">360 gallery expand</string>
     <string name="w360_expanding">Pulling from the 360 gallery…</string>
     <string name="w360_rotate">360 gallery rotation</string>

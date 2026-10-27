@@ -28,6 +28,16 @@
     <string name="long_press_hide">隐藏此应用</string>
     <string name="long_press_show">恢复显示此应用</string>
     <string name="long_press_info">应用信息</string>
+    <string name="long_press_move">移动到其他位置</string>
+    <string name="long_press_delete">删除应用</string>
+    <string name="move_hint">已拿起图标：方向键走到想要的位置，OK 放下，返回键放回原处</string>
+    <string name="move_done">已移动到：%1$s</string>
+    <string name="move_cancelled">已取消移动</string>
+    <string name="move_bad_target">只能放到另一个应用图标上</string>
+    <string name="move_failed">图标移动失败</string>
+    <string name="delete_confirm_msg">将从盒子上卸载 %1$s，系统会再确认一次。</string>
+    <string name="delete_confirm_yes">删除</string>
+    <string name="delete_no_uninstaller">这台盒子没有卸载界面，请到系统设置里卸载</string>
     <string name="panel_title">桌面设置</string>
     <string name="settings_back_hint">按返回键回到分类</string>
     <string name="backup">备份配置</string>
@@ -193,6 +203,21 @@
     <string name="sec_aerial">航拍壁纸</string>
     <string name="sec_bing">必应壁纸</string>
     <string name="sec_w360">360 图库</string>
+    <string name="sec_diag">网络诊断</string>
+
+    <!-- 壁纸画廊：单个图源的图片库，可看可挑。 -->
+    <string name="gallery_open">图库预览</string>
+    <string name="gallery_count">共 %1$d 张</string>
+    <string name="gallery_previous">上一张</string>
+    <string name="gallery_next">下一张</string>
+    <string name="gallery_apply">设为壁纸</string>
+    <string name="gallery_close">关闭</string>
+    <string name="gallery_empty">这个图库还没有图，先扩充一下</string>
+    <string name="gallery_applied">壁纸已换成：%1$s</string>
+    <string name="gallery_apply_failed">壁纸写入失败</string>
+
+    <string name="net_check">壁纸图源网络自检</string>
+    <string name="net_check_running">正在检测各图源…</string>
     <string name="w360_expand">360 图库扩充</string>
     <string name="w360_expanding">正在拉取 360 图库…</string>
     <string name="w360_rotate">360 图库轮换</string>

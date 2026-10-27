@@ -179,6 +179,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private PrefsStore prefs;
     private List<String> userDock = Collections.emptyList();
     private Set<String> userHidden = Collections.emptySet();
+    /**
+     * The owner's own icon order for the free grid (PrefsStore). Empty = alphabetical default.
+     * Only the apps the owner actually moved are in it; the rest keep their alphabetical place.
+     */
+    private List<String> userIconOrder = Collections.emptyList();
+    /**
+     * Move mode: the app the owner picked up is null when nothing is being moved. While it is
+     * set, the D-pad picks the drop target instead of moving the focus freely, and OK drops it.
+     */
+    private String movingPkg;
+    /** The tile the remote points at as the drop target while moving (-1 = none). */
+    private int moveTargetPos = -1;
     /** Folders the owner created (AT4K-like), password lock included. */
     private List<Folder> userFolders = new ArrayList<>();
     private List<Cards.Card> cards = Collections.emptyList();
@@ -374,6 +386,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         bingWasOn = prefs.isBingRotateOn();
         userDock = prefs.loadDock(cfg.dockApps);
         userHidden = prefs.loadHidden(new HashSet<>(cfg.hiddenApps));
+        userIconOrder = prefs.loadIconOrder();
         userFolders = prefs.loadFolders();
         hiddenApps = new HashSet<>(userHidden);
         COLUMNS = prefs.loadColumns(defaultColumns);   // the owner's dock-size pick (settings panel)
@@ -397,6 +410,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS, userDock, userHidden, userFolders, showHomeSettingsShortcut,
                 radiusFrac);
         adapter.setDockRowShown(dockBarOn);
+        adapter.setIconOrder(userIconOrder);
         grid.setAdapter(adapter);
 
         // tvOS layout: the rows always rest in the same place — the pinned dock row's slot when
@@ -1050,6 +1064,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS, userDock, userHidden, userFolders, showHomeSettingsShortcut,
                 radiusFrac);
         adapter.setDockRowShown(dockBarOn);
+        adapter.setIconOrder(userIconOrder);
         grid.setAdapter(adapter);
         builtTint = tint;
         builtRadiusPct = radiusPct;
@@ -1513,8 +1528,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Adopt the owner's dock order, hidden list and folders (long-press edits, or a restored backup).
         userDock = prefs.loadDock(userDock);
         userHidden = prefs.loadHidden(userHidden);
+        userIconOrder = prefs.loadIconOrder();
         userFolders = prefs.loadFolders();
         adapter.setEdits(userDock, userHidden, userFolders);
+        adapter.setIconOrder(userIconOrder);
         hiddenApps = new HashSet<>(userHidden);
         final List<Cards.Card> none = Collections.emptyList();
         Runnable done = () -> {
@@ -1632,6 +1649,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override
     public void onBackPressed() {
+        // Move mode first: Back puts the picked-up app back where it was.
+        if (movingPkg != null) {
+            finishMove(-1);
+            return;
+        }
         // Pure wallpaper with the grid revealed: Back slides it back down, like Up on the first row.
         if (!dockVisible && gridEntered) {
             hideGrid();
@@ -1653,6 +1675,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
+        // Move mode: the tile under the remote is where the picked-up app would land. The
+        // glass highlight already sits on the focused tile, so no extra paint is needed.
+        if (movingPkg != null) moveTargetPos = position;
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
@@ -1862,6 +1887,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.getItemCount();
         int target;
+        // Move mode: the remote must stay inside the free grid, so the drop target can only
+        // be an app icon. All four directions are handled here (the default focus search
+        // would walk out of the grid into the top bar).
+        if (movingPkg != null) {
+            int start = adapter.freeGridStart();
+            int end = adapter.freeGridEnd();
+            if (start < 0 || end < 0) return true;
+            int here = Math.max(start, Math.min(position, end));
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_DPAD_LEFT:
+                    target = here > start ? here - 1 : here;
+                    break;
+                case KeyEvent.KEYCODE_DPAD_RIGHT:
+                    target = here < end ? here + 1 : here;
+                    break;
+                case KeyEvent.KEYCODE_DPAD_UP:
+                    target = here - COLUMNS;
+                    if (target < start) target = here;   // the first row stays put
+                    break;
+                default:
+                    target = here + COLUMNS;
+                    if (target > end) target = here;    // the last row stays put
+                    break;
+            }
+            if (target != here) focusTile(target);
+            return true;
+        }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
@@ -1987,11 +2039,131 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         actions.add(() -> showFolderPicker(pkg));
         options.add(getString(R.string.icon_change));
         actions.add(() -> showIconMenu(pkg, label));
+        // Move: the owner picks the app up, walks the remote to the wanted slot and drops it.
+        if (adapter.groupAt(position) == 3 && adapter.isPlainAppAt(position)) {
+            options.add(getString(R.string.long_press_move));
+            actions.add(() -> startMove(pkg));
+        }
+        // Delete: uninstalls the app from the box (the system asks for the confirmation).
+        // "Hide" stays the reversible one — this one is not.
+        options.add(getString(R.string.long_press_delete));
+        actions.add(() -> confirmDeleteApp(pkg, label));
 
         Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
                 .setTitle(label)
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .create());
+    }
+
+    // ---- move mode (the owner's own icon order) --------------------------------------------------
+
+    /**
+     * Picks an app up for moving. The tile fades out (it is "in hand"), and the remote now
+     * picks the drop target: the tile under the focus is where the app would land, OK drops
+     * it, Back puts it back. The result is written to the owner's icon order and survives a
+     * restart.
+     */
+    private void startMove(String pkg) {
+        movingPkg = pkg;
+        moveTargetPos = -1;
+        adapter.setMovingPkg(pkg);
+        fadeTile(pkg, true);
+        // Put the focus on the tile that was just picked up. The remote's arrow keys are
+        // intercepted by the tile's own key listener, so the focus has to be ON a tile for
+        // them to be caught at all: if it stayed wherever it was (the top bar, or another
+        // app), the arrow keys would run the default focus search and walk out of the grid.
+        // The menu dialog still holds the focus while this runs, so the request has to wait
+        // for the dialog to go away — asked too early, the system drops it silently.
+        final int pos = adapter.positionOfPkg(pkg);
+        if (pos >= 0) {
+            grid.postDelayed(() -> {
+                if (movingPkg != null) focusTile(pos);
+            }, 150);
+        }
+        Toast.makeText(this, getString(R.string.move_hint), Toast.LENGTH_LONG).show();
+    }
+
+    /**
+     * Fades the picked-up tile (or brings it back). Done on the view itself: a rebind of the
+     * focused tile would cost the focus, and the remote must keep walking.
+     */
+    private void fadeTile(String pkg, boolean faded) {
+        int pos = adapter.positionOfPkg(pkg);
+        if (pos < 0) return;
+        androidx.recyclerview.widget.RecyclerView.ViewHolder vh =
+                grid.findViewHolderForAdapterPosition(pos);
+        if (vh == null) return;
+        View card = vh.itemView.findViewById(R.id.card);
+        if (card != null) card.setAlpha(faded ? 0.3f : 1f);
+    }
+
+    /** Drops the picked-up app onto the tile under the focus, or puts it back (Back). */
+    private void finishMove(int targetPos) {
+        String pkg = movingPkg;
+        movingPkg = null;
+        moveTargetPos = -1;
+        adapter.setMovingPkg(null);
+        if (pkg != null) fadeTile(pkg, false);
+        if (pkg == null) return;
+        if (targetPos < 0) {
+            Toast.makeText(this, R.string.move_cancelled, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // The target must be a plain app in the same group: a folder, a module card or the
+        // dock row is not a slot the app can be dropped into.
+        if (!adapter.isPlainAppAt(targetPos) || adapter.groupAt(targetPos) != 3) {
+            Toast.makeText(this, R.string.move_bad_target, Toast.LENGTH_LONG).show();
+            return;
+        }
+        String target = adapter.pkgAt(targetPos);
+        if (target == null || target.equals(pkg)) {
+            Toast.makeText(this, R.string.move_cancelled, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        // Swap the two in the owner's order: the free grid's current order is the base, and
+        // the two packages trade places in it.
+        List<String> order = new ArrayList<>(adapter.freeGridPackages());
+        int from = order.indexOf(pkg);
+        int to = order.indexOf(target);
+        if (from < 0 || to < 0) {
+            Toast.makeText(this, R.string.move_failed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        order.remove(from);
+        order.add(to, pkg);
+        userIconOrder = order;
+        prefs.saveIconOrder(order);
+        adapter.setIconOrder(order);
+        reloadTiles();
+        Toast.makeText(this, getString(R.string.move_done, target), Toast.LENGTH_SHORT).show();
+    }
+
+    // ---- delete (uninstall) an app ---------------------------------------------------------------
+
+    /**
+     * Uninstalls an app. The system shows its own confirmation screen, so the owner always
+     * sees what is about to go and can back out — this never removes anything on its own.
+     * (Hiding an app is the reversible thing; this is the real one.)
+     */
+    private void confirmDeleteApp(String pkg, String label) {
+        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+                .setTitle(getString(R.string.long_press_delete))
+                .setMessage(getString(R.string.delete_confirm_msg, label))
+                .setPositiveButton(R.string.delete_confirm_yes, (d, which) -> deleteApp(pkg))
+                .setNegativeButton(android.R.string.cancel, null)
+                .create());
+    }
+
+    /** Starts the system uninstaller for this package. */
+    private void deleteApp(String pkg) {
+        try {
+            Intent i = new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + pkg));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (ActivityNotFoundException noUninstaller) {
+            android.util.Log.d("TvHome", "no uninstaller on this box: " + noUninstaller);
+            Toast.makeText(this, R.string.delete_no_uninstaller, Toast.LENGTH_LONG).show();
+        }
     }
 
     // ---- icon management (inspired by AT4K): replace an app's icon with a picture, or put it back ----
@@ -2043,6 +2215,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public void onTileLaunch(AppAdapter.Entry e) {
+        // Move mode: OK drops the picked-up app on the tile under the focus instead of
+        // opening it. The target is the focused tile, which is what the remote points at.
+        if (movingPkg != null) {
+            int pos = adapter.positionOfPkg(e.pkg);
+            finishMove(pos >= 0 ? pos : -1);
+            return;
+        }
         if (!prefs.isPreviewOn() || projectionManager == null) {
             adapter.startApp(e);
             return;

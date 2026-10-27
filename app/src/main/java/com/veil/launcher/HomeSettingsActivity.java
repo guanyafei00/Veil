@@ -357,12 +357,14 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.scan_upload), null, v -> showQrUpload());
 
         section(getString(R.string.sec_aerial));
+        row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.AERIAL));
         row(getString(R.string.wallpaper_aerial), aerialValue = new TextView(this), v -> showAerialIntervalDialog());
         row(getString(R.string.aerial_source), aerialSourceValue = new TextView(this), v -> showAerialSourceDialog());
         row(getString(R.string.aerial_res), aerialResValue = new TextView(this), v -> showAerialResDialog());
         row(getString(R.string.aerial_expand), aerialExpandValue = new TextView(this), v -> showAerialExpandDialog());
 
         section(getString(R.string.sec_bing));
+        row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.BING));
         row(getString(R.string.wallpaper_bing), bingValue = new TextView(this), v -> {
             boolean on = prefs.isBingWallpaperOn();
             prefs.setBingWallpaperOn(!on);
@@ -373,12 +375,24 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.bing_rotate), bingRotateValue = new TextView(this), v -> showBingIntervalDialog());
 
         section(getString(R.string.sec_w360));
+        row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.W360));
         row(getString(R.string.w360_gallery), w360CatValue = new TextView(this), v -> showW360CatDialog());
         row(getString(R.string.w360_expand), w360ExpandValue = new TextView(this), v -> showW360ExpandDialog());
         row(getString(R.string.w360_rotate), w360RotateValue = new TextView(this), v -> showW360IntervalDialog());
 
         section(getString(R.string.sec_diag));
         row(getString(R.string.net_check), null, v -> runNetCheck());
+    }
+
+    /**
+     * Opens the picture gallery of one wallpaper source (the owner's preview request): the
+     * pool's pictures, a big preview and the "previous / next / set as wallpaper" controls.
+     * The gallery is a full-screen activity — a picture needs room to be judged.
+     */
+    private void openGallery(WallpaperStock.Source source) {
+        startActivity(new Intent(this, WallpaperGalleryActivity.class)
+                .putExtra("source", source.folder.equals("bing") ? "bing"
+                        : source.folder.equals("w360") ? "w360" : "aerial"));
     }
 
     /**

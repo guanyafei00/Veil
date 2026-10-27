@@ -30,6 +30,12 @@ final class PrefsStore {
     private static final String PREFS = "tvhome_prefs";
     private static final String KEY_DOCK = "dock_apps";
     private static final String KEY_HIDDEN = "hidden_apps";
+    /**
+     * The owner's own icon order on the desktop (the grid below the dock), as a list of
+     * package names. Empty = the alphabetical default. Only the apps the owner actually
+     * moved appear in it; the rest keep their alphabetical place around them.
+     */
+    private static final String KEY_ICON_ORDER = "icon_order";
     private static final String KEY_FOLDERS = "folders";
     private static final String KEY_LOCK_ENABLED = "lock_enabled";
     private static final String KEY_LOCK_PASSWORD = "lock_password";
@@ -125,6 +131,19 @@ final class PrefsStore {
 
     void saveHidden(Set<String> hidden) {
         sp.edit().putString(KEY_HIDDEN, writeList(new ArrayList<>(hidden))).apply();
+    }
+
+    /**
+     * The owner's icon order for the desktop grid (empty = alphabetical default).
+     * The list holds package names; the adapter sorts by the position of a package in it.
+     */
+    List<String> loadIconOrder() {
+        List<String> saved = readList(sp.getString(KEY_ICON_ORDER, null));
+        return saved != null ? saved : new ArrayList<>();
+    }
+
+    void saveIconOrder(List<String> order) {
+        sp.edit().putString(KEY_ICON_ORDER, writeList(order)).apply();
     }
 
     /** Folders as the owner edited them (empty when none was ever created). */

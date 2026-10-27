@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The wallpaper gallery: a big preview on top, the pool's thumbnails below it, and the
+     owner's controls ("previous" / "next" / "apply") along the bottom. The whole thing is a
+     full-screen dark panel, so a 4K wallpaper can be judged at the size it will be seen. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/galleryRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F50C0C10"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
+
+    <!-- Header: the source name and how many pictures the pool holds. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="34dp"
+        android:paddingEnd="34dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:id="@+id/galleryTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="#FFFFFFFF"
+            android:textSize="26sp"
+            android:fontFamily="sans-serif-medium"
+            android:singleLine="true"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/galleryCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#8E8E93"
+            android:textSize="14sp"
+            android:singleLine="true" />
+    </LinearLayout>
+
+    <!-- The big preview: the picture the pool would show, scaled to fit. -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginStart="34dp"
+        android:layout_marginEnd="34dp"
+        android:background="#FF000000"
+        android:clipChildren="false">
+
+        <ImageView
+            android:id="@+id/galleryPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/galleryEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:textColor="#8E8E93"
+            android:textSize="18sp"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- The pool's pictures as a filmstrip: each cell is a focusable thumbnail. -->
+    <HorizontalScrollView
+        android:id="@+id/galleryStrip"
+        android:layout_width="match_parent"
+        android:layout_height="132dp"
+        android:layout_marginTop="14dp"
+        android:paddingStart="34dp"
+        android:paddingEnd="34dp"
+        android:scrollbars="none"
+        android:descendantFocusability="afterDescendants">
+
+        <LinearLayout
+            android:id="@+id/galleryCells"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center_vertical" />
+    </HorizontalScrollView>
+
+    <!-- The owner's controls. Previous / next walk the pool; apply pins the shown picture. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:paddingTop="18dp"
+        android:paddingBottom="26dp">
+
+        <TextView
+            android:id="@+id/galleryPrev"
+            style="@style/GalleryButton"
+            android:text="@string/gallery_previous" />
+
+        <TextView
+            android:id="@+id/galleryNext"
+            style="@style/GalleryButton"
+            android:layout_marginStart="14dp"
+            android:text="@string/gallery_next" />
+
+        <TextView
+            android:id="@+id/galleryApply"
+            style="@style/GalleryButton"
+            android:layout_marginStart="14dp"
+            android:text="@string/gallery_apply" />
+
+        <TextView
+            android:id="@+id/galleryClose"
+            style="@style/GalleryButton"
+            android:layout_marginStart="14dp"
+            android:text="@string/gallery_close" />
+    </LinearLayout>
+</LinearLayout>
