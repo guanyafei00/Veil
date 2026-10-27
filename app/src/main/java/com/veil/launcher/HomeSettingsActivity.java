@@ -1413,11 +1413,27 @@ public class HomeSettingsActivity extends Activity {
         } catch (Exception e) {
             msg = getString(R.string.about_failed);
         }
+        // The version goes in here too: the owner needs to be able to tell at a glance which
+        // build is on the box (a release is only useful if the installed one can be named).
+        msg = versionLine() + "\n" + msg;
         Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
                 .setTitle(R.string.panel_about)
                 .setMessage(msg)
                 .setPositiveButton(android.R.string.ok, null)
                 .create());
+    }
+
+    /** "Veil v2.0.1 (201)" — read from the installed package, so it can never drift. */
+    private String versionLine() {
+        try {
+            android.content.pm.PackageInfo pi = getPackageManager()
+                    .getPackageInfo(getPackageName(), 0);
+            long code = android.os.Build.VERSION.SDK_INT >= 28
+                    ? pi.getLongVersionCode() : pi.versionCode;
+            return "Veil v" + pi.versionName + " (" + code + ")";
+        } catch (Exception e) {
+            return "Veil";
+        }
     }
 
     private static String gb(long bytes) {
