@@ -61,6 +61,10 @@ final class PrefsStore {
     private static final String KEY_W360_INTERVAL = "w360_interval_min";
     private static final String KEY_W360_LAST = "w360_last_at";
     private static final String KEY_W360_INDEX = "w360_index";
+    /** Prefix for the per-category catalogue sizes ("w360_catalog_26" → 10000). */
+    private static final String KEY_W360_CATALOG_PREFIX = "w360_catalog_";
+    /** Prefix for the per-category window cursor ("w360_cursor_26" → 245). */
+    private static final String KEY_W360_CURSOR_PREFIX = "w360_cursor_";
     private static final String KEY_AERIAL_USED_URLS = "aerial_used_urls";
     private static final String KEY_AERIAL_STILL_RES = "aerial_still_res";
     /** Aerial expansion source: auto | apple | wallhaven | w360 (the owner's manual override). */
@@ -453,6 +457,34 @@ final class PrefsStore {
 
     void saveW360Cat(String cid) {
         sp.edit().putString(KEY_W360_CAT, cid).apply();
+    }
+
+    /**
+     * The catalogue size of a 360 category, remembered from the last successful list call.
+     * The API's WAF only lets one request through at a time, so the app cannot ask "how big is
+     * this category?" and then "give me a window" — that pair of calls in a row is what got the
+     * box's IP flagged. Caching the size lets the next tap ask for a different window of the
+     * SAME single call.
+     */
+    int loadW360Catalog(String cid) {
+        return sp.getInt(KEY_W360_CATALOG_PREFIX + cid, 0);
+    }
+
+    void saveW360Catalog(String cid, int total) {
+        sp.edit().putInt(KEY_W360_CATALOG_PREFIX + cid, total).apply();
+    }
+
+    /**
+     * Where the next 360 list window should start. The API only serves a category's first
+     * 1000 items, so the cursor walks that range and wraps around — a random start would
+     * keep landing on the block that was downloaded last time.
+     */
+    int loadW360Cursor(String cid) {
+        return sp.getInt(KEY_W360_CURSOR_PREFIX + cid, 0);
+    }
+
+    void saveW360Cursor(String cid, int cursor) {
+        sp.edit().putInt(KEY_W360_CURSOR_PREFIX + cid, cursor).apply();
     }
 
     /** 360 stock rotation; mirrors the Bing keys and shares the same slot exclusivity. */

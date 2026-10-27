@@ -261,6 +261,55 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             reloadApps(false);
         }
     };
+    /**
+     * Network self-test and one-tap expansions over adb:
+     * {@code am broadcast -a com.veil.launcher.NETCHECK} runs the wallpaper-source sweep,
+     * {@code am broadcast -a com.veil.launcher.EXPAND_AERIAL} / {@code .EXPAND_W360} pull one
+     * round of pictures. The report lands in logcat (TvHome.NetCheck). The owner can trigger the
+     * same sweep from the settings panel.
+     */
+    private final IntentFilter netCheckFilter = new IntentFilter("com.veil.launcher.NETCHECK");
+    {
+        // The same receiver also carries the one-tap expansion actions.
+        netCheckFilter.addAction("com.veil.launcher.EXPAND_AERIAL");
+        netCheckFilter.addAction("com.veil.launcher.EXPAND_W360");
+    }
+    private final BroadcastReceiver netCheckReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action == null) return;
+            if (action.contains("EXPAND_AERIAL")) {
+                AerialExpander.expand(MainActivity.this, (added, total, error, detail) -> {
+                    android.util.Log.d("TvHome.NetCheck",
+                            "aerial expand: added=" + added + " total=" + total
+                                    + " error=" + error + " detail=" + detail);
+                    postUi(() -> Toast.makeText(MainActivity.this,
+                            "航拍扩充：新增 " + added + " 张，共 " + total + " 张"
+                                    + (error == null ? "" : " [" + error + "]"),
+                            Toast.LENGTH_LONG).show());
+                });
+                return;
+            }
+            if (action.contains("EXPAND_W360")) {
+                Wall360.expand(MainActivity.this, (added, total, error, detail) -> {
+                    android.util.Log.d("TvHome.NetCheck",
+                            "w360 expand: added=" + added + " total=" + total
+                                    + " error=" + error + " detail=" + detail);
+                    postUi(() -> Toast.makeText(MainActivity.this,
+                            "360 扩充：新增 " + added + " 张，共 " + total + " 张"
+                                    + (error == null ? "" : " [" + error + "]"),
+                            Toast.LENGTH_LONG).show());
+                });
+                return;
+            }
+            NetCheck.run(MainActivity.this, report -> {
+                android.util.Log.d("TvHome.NetCheck", "===== adb report =====\n" + report);
+                postUi(() -> Toast.makeText(MainActivity.this,
+                        "网络自检完成，详情见 logcat（TvHome.NetCheck）", Toast.LENGTH_LONG).show());
+            });
+        }
+    };
     private final Runnable minuteTick = new Runnable() {
         @Override
         public void run() {
@@ -1038,11 +1087,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Stock size the multi-market backfill aims for; one pass adds at most up to this. */
     private static final int BING_STOCK_TARGET = 48;
-    /** Markets whose daily pictures differ; 8 days each, deduped into one shared stock. */
-    private static final String[] BING_MARKETS = {
-            "zh-CN", "en-US", "ja-JP", "en-GB", "de-DE", "fr-FR", "zh-TW",
-            "en-IN", "en-CA", "en-AU", "pt-BR", "it-IT", "ru-RU", "ko-KR", "es-ES",
-    };
+    // The market list itself moved to BingStock.MARKETS — it is needed by more than one caller
+    // (the daily backfill and the aerial/360 fallbacks).
 
     /**
      * On resume, once a day: pull Bing's picture of the day into files/bing/ as stock (the
@@ -1079,7 +1125,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     copyFile(out, new File(dir, Config.WALLPAPER_NAME));
                     postUi(MainActivity.this::refreshWallpaper);
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 // Quiet by design: keep yesterday's picture, retry on the next resume — but leave a trace.
                 android.util.Log.d("TvHome", "bing wallpaper update failed: " + e);
             }
@@ -1087,11 +1133,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * Backfills the Bing stock across Bing's MARKETS: the archive API only serves the last
-     * ~8 days per market, but every market picks its own pictures — so one pass over 15
+     * Backfills the Bing stock across Bing's markets: the archive API only serves the last
+     * ~8 days per market, but every market picks its own pictures — so one pass over many
      * markets yields dozens of unique images instead of the 9 the single-market API shows.
      * Deduped by urlbase (globally unique per picture), capped per pass so a slow network
      * cannot stall the resume; the whole pass repeats at most once a day.
+     * <p>
+     * The heavy lifting lives in {@link BingStock}, which also scales the 4K cuts down while
+     * decoding — the old inline code decoded the full 3840x2160 bitmap (33 MB as ARGB_8888)
+     * before resizing it, which is an OutOfMemoryError on this box.
      */
     private void maybeFillBingStock() {
         if (!prefs.isBingWallpaperOn()) return;
@@ -1105,47 +1155,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 String today = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
                         .format(new java.util.Date());
                 if (count >= BING_STOCK_TARGET && today.equals(prefs.loadBingStockDate())) return;
-                if (!stock.exists() && !stock.mkdirs()) return;
-                java.util.Set<String> names = new java.util.HashSet<>();
-                if (have != null) for (File f : have) names.add(f.getName());
-                int saved = 0;
-                for (String mkt : BING_MARKETS) {
-                    if (count + saved >= BING_STOCK_TARGET) break;
-                    String api = httpGet("https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=" + mkt);
-                    if (api == null) continue;
-                    org.json.JSONArray images;
-                    try {
-                        images = new org.json.JSONObject(api).getJSONArray("images");
-                    } catch (Exception bad) {
-                        continue;   // a market answering an error page just contributes nothing
-                    }
-                    for (int i = 0; i < images.length() && count + saved < BING_STOCK_TARGET; i++) {
-                        org.json.JSONObject img = images.getJSONObject(i);
-                        String urlbase = img.optString("urlbase", "");
-                        String path = img.optString("url", "");
-                        if (urlbase.isEmpty() || path.isEmpty()) continue;
-                        String name = "bing_"
-                                + urlbase.substring(urlbase.lastIndexOf('/') + 1).replace('?', '_')
-                                + ".jpg";
-                        if (names.contains(name)) continue;
-                        byte[] jpg = fetchBingPicture(img, path);
-                        if (jpg == null || jpg.length < 10_000) continue;
-                        try (java.io.FileOutputStream fo = new java.io.FileOutputStream(new File(stock, name))) {
-                            fo.write(jpg);
-                        }
-                        names.add(name);
-                        saved++;
-                    }
-                }
+                int want = Math.max(1, BING_STOCK_TARGET - count);
+                int saved = BingStock.pullInto(MainActivity.this, stock, "bing_", want,
+                        BingStock.MARKETS.length);
+                if (saved <= 0) return;
                 prefs.saveBingStockDate(today);
                 final int total = count + saved;
-                if (saved > 0) {
-                    android.util.Log.d("TvHome", "bing stock backfilled: " + saved + " -> " + total);
-                    postUi(() -> Toast.makeText(this,
-                            getString(R.string.bing_stock_done, total), Toast.LENGTH_SHORT).show());
-                    postUi(MainActivity.this::refreshWallpaper);
-                }
-            } catch (Exception e) {
+                android.util.Log.d("TvHome", "bing stock backfilled: " + saved + " -> " + total);
+                postUi(() -> Toast.makeText(this,
+                        getString(R.string.bing_stock_done, total), Toast.LENGTH_SHORT).show());
+                postUi(MainActivity.this::refreshWallpaper);
+            } catch (Throwable e) {
                 android.util.Log.d("TvHome", "bing stock backfill failed: " + e);
             }
         });
@@ -1244,16 +1264,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private byte[] httpGetBytes(String url) {
         try {
-            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            c.setConnectTimeout(10_000);
-            c.setReadTimeout(15_000);
-            java.io.InputStream in = c.getInputStream();
-            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[16384];
-            int n;
-            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
-            in.close();
-            return bo.toByteArray();
+            return Http.getBytes(url, 10_000, 15_000, null, 20 * 1024 * 1024);
         } catch (Exception e) {
             // Expected when the box is offline; debug level so a real problem is still traceable.
             android.util.Log.d("TvHome", "GET bytes failed for " + url + ": " + e);
@@ -1383,22 +1394,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Tiny GET helper; null on any failure so the caller can fall back to the cache. */
     private static String httpGet(String url) {
-        try {
-            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            c.setConnectTimeout(8000);
-            c.setReadTimeout(8000);
-            java.io.InputStream in = c.getInputStream();
-            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
-            in.close();
-            return bo.toString("UTF-8");
-        } catch (Exception e) {
+        String body = Http.getStringOrNull(url, 8000, 8000);
+        if (body == null) {
             // Expected when the box is offline; debug level so a real problem is still traceable.
-            android.util.Log.d("TvHome", "GET failed for " + url + ": " + e);
-            return null;
+            android.util.Log.d("TvHome", "GET failed for " + url);
         }
+        return body;
     }
 
     @Override
@@ -1406,8 +1407,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onResume();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(netCheckReceiver, netCheckFilter, Context.RECEIVER_NOT_EXPORTED);
         } else {
             registerReceiver(packageReceiver, packageFilter);
+            registerReceiver(netCheckReceiver, netCheckFilter);
         }
         tilesReady = false;
         promptsPaused = false;
@@ -1568,6 +1571,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onPause() {
         super.onPause();
         unregisterReceiver(packageReceiver);
+        unregisterReceiver(netCheckReceiver);
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(screensaverTick);   // an app or the panel is in front: no idle count
         // The desktop is not on screen: the breath rests (the screen is off or showing an app).

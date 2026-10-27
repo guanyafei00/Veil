@@ -376,6 +376,25 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.w360_gallery), w360CatValue = new TextView(this), v -> showW360CatDialog());
         row(getString(R.string.w360_expand), w360ExpandValue = new TextView(this), v -> showW360ExpandDialog());
         row(getString(R.string.w360_rotate), w360RotateValue = new TextView(this), v -> showW360IntervalDialog());
+
+        section(getString(R.string.sec_diag));
+        row(getString(R.string.net_check), null, v -> runNetCheck());
+    }
+
+    /**
+     * The wallpaper-source sweep: DNS, TCP and HTTP for every picture source, with the head of
+     * each answer. The report lands in a dialog (and in logcat, tag TvHome.NetCheck).
+     */
+    private void runNetCheck() {
+        Toast.makeText(this, R.string.net_check_running, Toast.LENGTH_SHORT).show();
+        NetCheck.run(this, report -> {
+            android.util.Log.d("TvHome.NetCheck", "===== panel report =====\n" + report);
+            Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+                    .setTitle(R.string.net_check)
+                    .setMessage(report)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .create());
+        });
     }
 
     /**
@@ -943,22 +962,12 @@ public class HomeSettingsActivity extends Activity {
     }
 
     private static String httpGet(String url) {
-        try {
-            java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
-            c.setConnectTimeout(8000);
-            c.setReadTimeout(8000);
-            java.io.InputStream in = c.getInputStream();
-            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
-            in.close();
-            return bo.toString("UTF-8");
-        } catch (Exception e) {
+        String body = Http.getStringOrNull(url, 8000, 8000);
+        if (body == null) {
             // Expected when the box is offline; debug level so a real problem is still traceable.
-            android.util.Log.d("TvHome", "GET failed for " + url + ": " + e);
-            return null;
+            android.util.Log.d("TvHome", "GET failed for " + url);
         }
+        return body;
     }
 
     // ---- desktop lock ---------------------------------------------------------------------------

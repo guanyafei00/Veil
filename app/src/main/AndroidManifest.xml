@@ -38,7 +38,11 @@
         android:banner="@drawable/banner"
         android:theme="@style/Theme.TvHome"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:localeConfig="@xml/locales_config">
+        <!-- usesCleartextTraffic: the 360 wallpaper API answers HTTP ONLY (no TLS on cdn.apc.360.cn).
+             Android 9+ silently blocks cleartext by default — every Wall360 request died with
+             "connection failed" before this flag, on networks where the API was in fact reachable. -->
 
         <activity
             android:name=".MainActivity"

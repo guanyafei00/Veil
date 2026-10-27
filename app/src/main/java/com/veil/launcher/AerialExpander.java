@@ -47,13 +47,13 @@ final class AerialExpander {
     private static final int STILL_W = 1920, STILL_H = 1080;
     private static final int STILL_W_4K = 3840, STILL_H_4K = 2160;
     /** Bytes pulled per clip: ~10 s of a 2K stream plus keyframe headroom; later grabs skip nulls. */
-    private static final int MAX_CLIP_BYTES = 48 * 1024 * 1024;
+    private static final long MAX_CLIP_BYTES = 48L * 1024 * 1024;
     /** 4K HEVC runs ~25-40 Mbps: a longer head for the same 0-9 s window. */
-    private static final int MAX_CLIP_BYTES_4K = 80 * 1024 * 1024;
+    private static final long MAX_CLIP_BYTES_4K = 80L * 1024 * 1024;
     /** Head bytes parsed for the top-level atom layout (ftyp/wide/mdat…). */
     private static final int PROBE_BYTES = 256;
     /** Tail bytes fetched when hunting the moov atom (it sits at the end of these files). */
-    private static final int TAIL_MAX = 8 * 1024 * 1024;
+    private static final long TAIL_MAX = 8L * 1024 * 1024;
     /**
      * Apple's official tvOS 13+ catalog: the only aerials that exist as 4K masters (13 clips).
      * The bundled 114-clip playlist is the older tvOS 12 catalog, AVC 1080p only.
@@ -70,6 +70,8 @@ final class AerialExpander {
     static final String ERR_TIMEOUT = "timeout";
     static final String ERR_DECODE = "decode";
     static final String ERR_EXHAUSTED = "exhausted";
+    /** The box ran out of memory while working on a clip. */
+    static final String ERR_MEMORY = "memory";
 
     /** Result of one run, on the main thread: added &gt; 0 with error == null on success. */
     interface Callback {
@@ -117,8 +119,17 @@ final class AerialExpander {
                 // Resolution: the owner's pick, or follow the display (4K panel → 4K stills).
                 int res = prefs.loadAerialStillRes();
                 android.util.DisplayMetrics dm = app.getResources().getDisplayMetrics();
+                int panel = Math.max(dm.widthPixels, dm.heightPixels);
                 boolean want4k = res == 2160
-                        || (res == 0 && Math.max(dm.widthPixels, dm.heightPixels) >= 3000);
+                        || (res == 0 && panel >= 3000);
+                // A 1080p panel cannot show a 4K still, and the 4K clips are HEVC — which the
+                // box has to decode in software. On the q201 (Android 7.1.2, 1920x1080) the
+                // 4K path ran out of memory before it produced a frame, so the 4K attempt is
+                // only worth it on a panel that can actually display it.
+                if (want4k && panel < 3000) {
+                    Log.w(TAG, "panel is " + panel + "px wide — skipping the 4K clips");
+                    want4k = false;
+                }
 
                 // Source pick (the owner asked for a manual choice): "auto" runs the whole
                 // chain; any other value forces ONE path, skipping the bundled release too.
@@ -141,6 +152,13 @@ final class AerialExpander {
                     int got = Wall360.pullInto(app, stills, "aerial_", "9", BUNDLED_BATCH);
                     if (got > 0) added = got;
                     else if (error == null) { error = ERR_NET; detail = Wall360.lastPullDetail(); }
+                    // Even a forced source gets the Bing fallback: the owner asked for "more
+                    // pictures", and a dead source with no fallback is the exact complaint
+                    // this expansion was rewritten to end.
+                    if (added == 0) {
+                        int fallback = BingStock.pullInto(app, stills, "aerial_", 6, 4);
+                        if (fallback > 0) { added = fallback; error = null; detail = "已用必应高清图补足"; }
+                    }
                 } else {
                     // "auto" after the bundled pool ran dry, or "apple" (video clips only).
                     for (int tries = 0; tries < MAX_TRIES; tries++) {
@@ -155,7 +173,16 @@ final class AerialExpander {
                             if (error == null) error = ERR_EXHAUSTED;
                             break;
                         }
-                        int got = grabFrames(url, stills, nextIndex(have) + added, mode4k);
+                        int got = 0;
+                        try {
+                            got = grabFrames(url, stills, nextIndex(have) + added, mode4k);
+                        } catch (Throwable t) {
+                            // A clip can die in ways that are not Exceptions (an OutOfMemoryError
+                            // on this box did exactly that). It must not abort the whole
+                            // expansion — the fallbacks below still have pictures to offer.
+                            Log.w(TAG, "clip failed hard: " + t);
+                            detail = t.getClass().getSimpleName() + ": " + t.getMessage();
+                        }
                         if (got > 0) {
                             // Only a clip that actually produced stills counts as used.
                             prefs.addAerialUsedUrl(baseName(url));
@@ -172,10 +199,14 @@ final class AerialExpander {
                     // clip. Whatever the cause, a still-photo source from a DIFFERENT domain gets its
                     // own chance — the expansion should end with real pictures, not a dead message.
                     if (added == 0 && auto) {
-                        int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
-                        if (got > 0) {
-                            added = got;
-                            error = null;
+                        try {
+                            int got = fetchWallhavenStills(stills, nextIndex(have) + added, want4k);
+                            if (got > 0) {
+                                added = got;
+                                error = null;
+                            }
+                        } catch (Throwable t) {
+                            Log.w(TAG, "wallhaven fallback failed: " + t);
                         }
                     }
                     // Last chance, and the one that actually works on the box: the 360 gallery
@@ -192,13 +223,27 @@ final class AerialExpander {
                             detail = Wall360.lastPullDetail();
                         }
                     }
+                    // The very last resort: Bing's archive. Its root certificate is old enough
+                    // for Android 7's CA store, so it answers on the box no matter what the
+                    // other hosts do — and a tap must always end with real pictures.
+                    if (added == 0 && auto) {
+                        int fallback = BingStock.pullInto(app, stills, "aerial_", 6, 4);
+                        if (fallback > 0) {
+                            added = fallback;
+                            error = null;
+                            detail = "航拍视频不可用，已用必应高清图补足";
+                        }
+                    }
                 }
                 File[] after = stills.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
                 total = after == null ? total : after.length;
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                // Throwable, not Exception: an OutOfMemoryError from buffering a 48-80 MB
+                // HEVC head on a 512 MB box is an Error, and it slipped past every
+                // catch (Exception) — the expansion reported "0 added" with no reason at all.
                 Log.w(TAG, "expand failed: " + e);
-                detail = String.valueOf(e.getMessage());
-                error = classify(e);
+                detail = e.getClass().getSimpleName() + ": " + e.getMessage();
+                error = e instanceof OutOfMemoryError ? ERR_MEMORY : classify(e);
             } finally {
                 running = false;
                 final int fa = added, ft = total;
@@ -306,8 +351,8 @@ final class AerialExpander {
     }
 
     /** Turns a thrown exception into one of the ERR_* codes the panel can explain. */
-    private static String classify(Exception e) {
-        if (e instanceof SocketTimeoutException) return ERR_TIMEOUT;
+    private static String classify(Throwable e) {
+        if (e instanceof java.net.SocketTimeoutException) return ERR_TIMEOUT;
         String m = String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT);
         if (m.contains("timeout") || m.contains("timed out")) return ERR_TIMEOUT;
         if (m.contains("failed to connect") || m.contains("unreachable")
@@ -357,22 +402,11 @@ final class AerialExpander {
 
     /** 16-byte range probe: true when the clip is really on Apple's server. */
     private static boolean urlAlive(String url) {
-        HttpURLConnection c = null;
         try {
-            c = (HttpURLConnection) new URL(url).openConnection();
-            c.setConnectTimeout(10_000);
-            c.setReadTimeout(10_000);
-            c.setRequestProperty("Range", "bytes=0-15");
-            c.setRequestProperty("User-Agent", "QuickTime/7.6");
-            int code = c.getResponseCode();
-            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) return false;
-            try (InputStream in = c.getInputStream()) {
-                return in.read(new byte[16]) > 0;
-            }
+            byte[] head = Http.getBytes(url, 10_000, 10_000, "bytes=0-15", 16);
+            return head != null && head.length > 0;
         } catch (Exception dead) {
             return false;
-        } finally {
-            if (c != null) c.disconnect();
         }
     }
 
@@ -411,23 +445,7 @@ final class AerialExpander {
 
     /** Plain GET with real timeouts; null-free — failures throw and land in classify(). */
     private static byte[] fetchAll(String url) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(10_000);
-        c.setReadTimeout(15_000);
-        c.setRequestProperty("User-Agent", "QuickTime/7.6");
-        try {
-            int code = c.getResponseCode();
-            if (code != HttpURLConnection.HTTP_OK) throw new IOException("HTTP " + code);
-            ByteArrayOutputStream bo = new ByteArrayOutputStream();
-            try (InputStream in = c.getInputStream()) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) > 0 && bo.size() < 20 * 1024 * 1024) bo.write(buf, 0, n);
-            }
-            return bo.toByteArray();
-        } finally {
-            c.disconnect();
-        }
+        return Http.getBytes(url, 10_000, 15_000, null, 20 * 1024 * 1024);
     }
 
     /**
@@ -546,68 +564,75 @@ final class AerialExpander {
         }
         if (mdatStart < 0) throw new IOException("no mdat in clip head");
         // moov at the tail: fetch it, patch it, splice it. Apple's aerials end with the moov.
-        byte[] tail = fetchRange(url, mdatStart + mdatSize, TAIL_MAX);
-        int mOff = -1;
-        long mSize = 0;
-        int toff = 0;
-        while (toff + 8 <= tail.length) {
-            long size = u32(tail, toff) & 0xFFFFFFFFL;
-            String typ = atomType(tail, toff);
-            if (size == 1) size = u64(tail, toff + 8);
-            if (size < 8) break;
-            if ("moov".equals(typ)) { mOff = toff; mSize = size; break; }
-            toff += (int) size;
-        }
-        if (mOff < 0 || mSize > tail.length - mOff) throw new IOException("moov not found at tail");
-        byte[] moov = new byte[(int) mSize];
-        System.arraycopy(tail, mOff, moov, 0, (int) mSize);
-        patchChunkOffsets(moov, 8, moov.length, mSize + 8 - mdatHdrLen);
-        // Splice: prefix + patched moov + a fresh mdat box header + the media payload.
-        long payload = raw.length() - mdatStart - mdatHdrLen;
-        try (java.io.FileInputStream in = new java.io.FileInputStream(raw);
-             FileOutputStream fo = new FileOutputStream(out)) {
-            byte[] buf = new byte[65536];
-            long remaining = mdatStart;
-            while (remaining > 0) {
-                int r = in.read(buf, 0, (int) Math.min(buf.length, remaining));
-                if (r < 0) throw new IOException("head shorter than its own atom table");
-                fo.write(buf, 0, r);
-                remaining -= r;
+        // The tail is streamed to a temp file (not a byte[]): 8 MB in memory on this box is
+        // one OOM away from the failure we are fixing.
+        File tailFile = new File(raw.getParentFile(), ".clip.tail");
+        try {
+            fetchRange(url, mdatStart + mdatSize, TAIL_MAX, tailFile);
+            byte[] tail = readWhole(tailFile);
+            int mOff = -1;
+            long mSize = 0;
+            int toff = 0;
+            while (toff + 8 <= tail.length) {
+                long size = u32(tail, toff) & 0xFFFFFFFFL;
+                String typ = atomType(tail, toff);
+                if (size == 1) size = u64(tail, toff + 8);
+                if (size < 8) break;
+                if ("moov".equals(typ)) { mOff = toff; mSize = size; break; }
+                toff += (int) size;
             }
-            fo.write(moov);
-            long boxSize = payload + 8;
-            fo.write(new byte[]{
-                    (byte) (boxSize >> 24), (byte) (boxSize >> 16), (byte) (boxSize >> 8), (byte) boxSize,
-                    'm', 'd', 'a', 't'});
-            long skip = mdatHdrLen;
-            while (skip > 0) skip -= in.skip(skip);
-            int n;
-            while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+            if (mOff < 0 || mSize > tail.length - mOff) throw new IOException("moov not found at tail");
+            byte[] moov = new byte[(int) mSize];
+            System.arraycopy(tail, mOff, moov, 0, (int) mSize);
+            patchChunkOffsets(moov, 8, moov.length, mSize + 8 - mdatHdrLen);
+            // Splice: prefix + patched moov + a fresh mdat box header + the media payload.
+            long payload = raw.length() - mdatStart - mdatHdrLen;
+            try (java.io.FileInputStream in = new java.io.FileInputStream(raw);
+                 FileOutputStream fo = new FileOutputStream(out)) {
+                byte[] buf = new byte[65536];
+                long remaining = mdatStart;
+                while (remaining > 0) {
+                    int r = in.read(buf, 0, (int) Math.min(buf.length, remaining));
+                    if (r < 0) throw new IOException("head shorter than its own atom table");
+                    fo.write(buf, 0, r);
+                    remaining -= r;
+                }
+                fo.write(moov);
+                long boxSize = payload + 8;
+                fo.write(new byte[]{
+                        (byte) (boxSize >> 24), (byte) (boxSize >> 16), (byte) (boxSize >> 8), (byte) boxSize,
+                        'm', 'd', 'a', 't'});
+                long skip = mdatHdrLen;
+                while (skip > 0) skip -= in.skip(skip);
+                int n;
+                while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
+            }
+            Log.d(TAG, "fast-start rebuilt: moov " + mSize + "B + mdat " + payload + "B at " + mdatStart);
+        } finally {
+            if (!tailFile.delete()) Log.w(TAG, "tail temp left behind: " + tailFile);
         }
-        Log.d(TAG, "fast-start rebuilt: moov " + mSize + "B + mdat " + payload + "B at " + mdatStart);
     }
 
-    /** Range-GETs up to {@code max} bytes from {@code start} (the moov hunt at the tail). */
-    private static byte[] fetchRange(String url, long start, int max) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(10_000);
-        c.setReadTimeout(15_000);
-        c.setRequestProperty("Range", "bytes=" + start + "-" + (start + max - 1));
-        try {
-            int code = c.getResponseCode();
-            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
-                throw new IOException("HTTP " + code);
+    /** Reads a whole file into memory (the moov tail is small; the clip head never goes here). */
+    private static byte[] readWhole(File f) throws IOException {
+        long len = f.length();
+        if (len > 64L * 1024 * 1024) throw new IOException("temp file too big: " + len);
+        byte[] out = new byte[(int) len];
+        try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            int off = 0;
+            while (off < out.length) {
+                int r = in.read(out, off, out.length - off);
+                if (r < 0) break;
+                off += r;
             }
-            ByteArrayOutputStream bo = new ByteArrayOutputStream();
-            try (InputStream in = c.getInputStream()) {
-                byte[] buf = new byte[16384];
-                int n;
-                while ((n = in.read(buf)) > 0 && bo.size() < max) bo.write(buf, 0, n);
-            }
-            return bo.toByteArray();
-        } finally {
-            c.disconnect();
         }
+        return out;
+    }
+
+    /** Range-GETs up to {@code max} bytes from {@code start} into {@code out}, streamed. */
+    private static void fetchRange(String url, long start, long max, File out) throws Exception {
+        Http.downloadToFile(url, 10_000, 20_000,
+                "bytes=" + start + "-" + (start + max - 1), max, out);
     }
 
     /** Atom boxes whose children are boxes again; everything else is a leaf. */
@@ -681,33 +706,13 @@ final class AerialExpander {
     /**
      * Range-gets the first {@code maxBytes} of the clip into {@code out}. A real connection with
      * real timeouts, so the caller can tell "no network" from "no frames".
+     * <p>
+     * The head is STREAMED to disk, never buffered in memory: a 48-80 MB byte[] on the box's
+     * small heap was an instant OutOfMemoryError.
      */
-    private static void downloadHead(String url, File out, int maxBytes) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setConnectTimeout(10_000);
-        c.setReadTimeout(15_000);
-        c.setRequestMethod("GET");
-        c.setRequestProperty("Range", "bytes=0-" + (maxBytes - 1));
-        try {
-            int code = c.getResponseCode();
-            if (code != HttpURLConnection.HTTP_OK && code != HttpURLConnection.HTTP_PARTIAL) {
-                throw new IOException("HTTP " + code);
-            }
-            long total = 0;
-            try (InputStream in = c.getInputStream();
-                 FileOutputStream fo = new FileOutputStream(out)) {
-                byte[] buf = new byte[16384];
-                int n;
-                while ((n = in.read(buf)) > 0) {
-                    total += n;
-                    fo.write(buf, 0, n);
-                    if (total >= maxBytes) break;
-                }
-            }
-            if (total < 64 * 1024) throw new IOException("clip too small: " + total);
-        } finally {
-            c.disconnect();
-        }
+    private static void downloadHead(String url, File out, long maxBytes) throws Exception {
+        long got = Http.downloadToFile(url, 10_000, 30_000, "bytes=0-" + (maxBytes - 1), maxBytes, out);
+        if (got < 64 * 1024) throw new IOException("clip too small: " + got);
     }
 
     /** One past the highest aerial_NN.jpg number already in the folder. */

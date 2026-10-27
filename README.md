@@ -8,14 +8,36 @@ tvOS 风格的 Android TV / 盒子桌面（launcher），干净、轻量、纯�
 
 | 安装包 | 体积 | 说明 |
 | --- | --- | --- |
-| [Veil-TV-v2.0.0-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.0.0/Veil-TV-v2.0.0-full.apk) | 6.9 MB | 含 24 张预置航拍静图 + 真 4K（3840×2160）默认壁纸，航拍扩充离线可用 |
-| [Veil-TV-v2.0.0-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.0.0/Veil-TV-v2.0.0-lite.apk) | 0.6 MB | 不含预置航拍图库，功能完全一致，航拍扩充走网络（360 图库，国内直连） |
+| [Veil-TV-v2.0.1-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.0.1/Veil-TV-v2.0.1-full.apk) | 6.9 MB | 含 24 张预置航拍静图 + 真 4K（3840×2160）默认壁纸，航拍扩充离线可用 |
+| [Veil-TV-v2.0.1-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.0.1/Veil-TV-v2.0.1-lite.apk) | 0.6 MB | 不含预置航拍图库，功能完全一致，航拍扩充走网络（360 图库，国内直连） |
 
 ```bash
-adb install -r Veil-TV-v2.0.0-lite.apk
+adb install -r Veil-TV-v2.0.1-lite.apk
 ```
 
 两个包包名相同（`com.veil.launcher`），可互相覆盖安装。安装后在系统设置里把 Veil 设为默认桌面。
+
+### v2.0.1：老安卓盒子上的壁纸源修复（真机实测 q201 / Android 7.1.2）
+
+这一版修的是「只有必应能用，其他图源全都连不上」的问题，全部改动都在斐讯 N1 这台
+Android 7.1.2 的盒子上实测通过：
+
+- **统一 HTTP 客户端 + TLS 降级**：安卓 7 的系统证书库太老（2019 年前的根证书），
+  现代 CDN 的证书链一律握手失败（`Trust anchor for certification path not found`）。
+  现在先用系统信任，握手失败再放宽校验重试一次 —— 必应 / 360 图床 / Apple 航拍 / 天气
+  全部恢复 200。
+- **360 图库「IP Forbidden」的真相**：它不是网络封锁，而是**请求窗口越界**。实测该接口
+  只开放每个分类的**前 1000 条**，且 `count` 不能超过 99；越界时服务端用
+  `errno 1105 / Proxy Warning - IP Forbidden` 回答（这句话极具误导性）。现在请求窗口
+  按合法范围取，并用**滚动游标**而不是随机起点，连点扩充也能持续拿到新图。
+- **航拍扩充静默失败**：4K 视频头（48–80 MB）整块读进内存，在小内存盒子上触发
+  `OutOfMemoryError` —— 而它是 `Error`，逃过了所有 `catch (Exception)`，于是扩充报告显示
+  「0 张、无错误」。现在改为**流式落盘**、捕获 `Throwable`，并在 1080p 屏上自动跳过
+  4K（HEVC 软解）路线。
+- **必应多市场图库提为通用兜底**（`BingStock`）：360 / 航拍任一路径失效时自动用必应
+  补足，**扩充永远有图**，不再以「连接不上服务器」收场。
+- **网络自检工具**：设置面板新增「网络自检」，逐源打印 DNS / TCP / HTTP / 响应首段；
+  也可 `adb shell am broadcast -a com.veil.launcher.NETCHECK` 触发。
 
 ## 特性
 
