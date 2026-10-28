@@ -43,6 +43,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.animation.AnimationUtils;
@@ -136,6 +137,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private android.widget.ImageView wallpaperView;
     /** The incoming picture during a cross-fade; settles into wallpaperView when the fade ends. */
     private android.widget.ImageView wallFadeView;
+    /** The live Apple aerial video surface behind the UI; the desktop "航拍视频真播" background. */
+    private SurfaceView aerialVideoView;
+    /** Streams the aerial clips; toggles wallpaperView so the video shows through when playing. */
+    private AerialWallpaperPlayer aerialVideo;
     private boolean wallTransitioning;
     /** The Ken Burns breath running on wallpaperView; paused while the desktop is away. */
     private android.animation.ValueAnimator breatheAnim;
@@ -349,6 +354,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
+        // Desktop aerial video background: a full-screen surface behind the UI. The static still
+        // (wallpaperView) sits on top of it and is hidden only once a frame is actually playing,
+        // so the desktop shows the moving Apple-TV-style aerial instead of a frozen picture — and
+        // falls back to the still if the network or codec fails. The surface punches a transparent
+        // hole in the window, so it shows through regardless of root's background colour.
+        aerialVideoView = new SurfaceView(this);
+        aerialVideoView.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(aerialVideoView, 0);   // backmost child; the video composites behind the window UI
+        aerialVideo = new AerialWallpaperPlayer(this, aerialVideoView, playing -> {
+            if (wallpaperView != null) {
+                wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+            }
+        });
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         glass = findViewById(R.id.glass);
         topBar = findViewById(R.id.topBar);
@@ -1034,6 +1053,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             wallpaperStamp = stamp;
             showWallpaper(wall);
         }
+        updateAerialVideo();   // the wallpaper (and its source) may have changed: re-evaluate the video
+    }
+
+    /**
+     * Starts or stops the desktop aerial video. The moving Apple aerial plays whenever the owner's
+     * wallpaper is the Apple aerial source (auto/apple) with auto-rotate on — that is the
+     * "航拍视频真播" the owner asked for, showing live without any trip into Settings. When it is
+     * off, the static still stays (this is a no-op if the player is already in the right state).
+     */
+    private void updateAerialVideo() {
+        if (aerialVideo == null) return;
+        String src = prefs.loadAerialSource();
+        boolean want = prefs.isAerialRotateOn()
+                && ("auto".equals(src) || "apple".equals(src));
+        if (want) {
+            if (!aerialVideo.isActive()) aerialVideo.start();
+        } else {
+            aerialVideo.stop();
+        }
     }
 
     /** Applies the owner's dock-size pick (settings panel): rebuilds the grid when it changed. */
@@ -1460,6 +1498,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
         }
         refreshWallpaper();
+        // The aerial video follows the wallpaper source: (re)start it when the owner returns with
+        // the Apple aerial rotation on, pause it otherwise.
+        updateAerialVideo();
         // Back from an app: the content preview for the app we just left is written now.
         PreviewCapture.stopAndSave();
         updateWeather();
@@ -1593,6 +1634,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         handler.removeCallbacks(screensaverTick);   // an app or the panel is in front: no idle count
         // The desktop is not on screen: the breath rests (the screen is off or showing an app).
         if (breatheAnim != null) breatheAnim.pause();
+        // The desktop video is off screen too: pause it so it isn't decoding behind another app.
+        if (aerialVideo != null) aerialVideo.pause();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
@@ -1631,6 +1674,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (aerialVideo != null) aerialVideo.release();
         if (aerialTicker != null) handler.removeCallbacks(aerialTicker);
         handler.removeCallbacks(screensaverTick);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
@@ -2810,6 +2854,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             final Intent liveTvIntent = liveTv;
             addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1, () -> open(liveTvIntent));
         }
+        // Desktop aerial video, reachable straight from the 信源 menu — the owner's parents no
+        // longer need to open Settings to get the moving Apple-TV-style aerial on the desktop.
+        if (rows.getChildCount() > 0) addSeparator(rows);
+        addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.aerial_video), -1, () -> {
+            prefs.setAerialRotateOn(true);
+            prefs.saveAerialSource("apple");
+            updateAerialVideo();
+        });
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();
             return;
