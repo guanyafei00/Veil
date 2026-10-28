@@ -990,6 +990,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * if the folder is empty, so the manual wallpaper keeps working.
      */
     private boolean maybeRotateAerialWallpaper() {
+        // In "航拍视频" wallpaper mode the live video is the background; don't swap stills underneath it.
+        if ("video".equals(prefs.loadAerialSource())) return false;
         if (!prefs.isAerialRotateOn()) return false;
         long now = System.currentTimeMillis();
         long interval = prefs.loadAerialIntervalMin() * 60_000L;
@@ -1057,14 +1059,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * Starts or stops the desktop aerial video. This is driven ONLY by the 信源 (HDMI) selector's
-     * "航拍视频" switch — it is deliberately independent of the wallpaper source. When on, the
-     * moving Apple aerial plays on the desktop; when off, the static still stays. No-op if the
+     * Starts or stops the desktop aerial video. This is driven by the WALLPAPER source: when the
+     * owner picks "航拍视频" as the wallpaper source (HomeSettings → 壁纸 → 航拍图源 → 航拍视频), the
+     * moving Apple aerial plays on the desktop. The 信源 (HDMI) menu is untouched — it lists only
+     * real video inputs. When the source is anything else, the static still stays. No-op if the
      * player is already in the right state.
      */
     private void updateAerialVideo() {
         if (aerialVideo == null) return;
-        if (prefs.isAerialVideoOn()) {
+        if ("video".equals(prefs.loadAerialSource())) {
             if (!aerialVideo.isActive()) aerialVideo.start();
         } else {
             aerialVideo.stop();
@@ -2851,15 +2854,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             final Intent liveTvIntent = liveTv;
             addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1, () -> open(liveTvIntent));
         }
-        // Desktop aerial video, reachable straight from the 信源 (HDMI) selector — tap to toggle the
-        // moving Apple-TV-style background on/off, independent of any wallpaper setting.
-        if (rows.getChildCount() > 0) addSeparator(rows);
-        addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.aerial_video),
-                prefs.isAerialVideoOn() ? TvInputManager.INPUT_STATE_CONNECTED : -1,
-                () -> {
-                    prefs.setAerialVideoOn(!prefs.isAerialVideoOn());
-                    updateAerialVideo();
-                });
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();
             return;

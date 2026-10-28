@@ -1220,12 +1220,13 @@ public class HomeSettingsActivity extends Activity {
 
     /** Aerial expansion source: auto chain, or force ONE of the paths (the owner's ask). */
     private void showAerialSourceDialog() {
-        final String[] ids = {"auto", "apple", "wallhaven", "w360"};
+        final String[] ids = {"auto", "apple", "wallhaven", "w360", "video"};
         final String[] names = {
                 "自动（内置 → Apple 视频 → Wallhaven → 360）",
                 "仅 Apple 视频抽帧（需能连苹果 CDN）",
                 "仅 Wallhaven（国际源，盒子常被墙）",
                 "仅 360 图库（国内直连，最稳）",
+                "航拍视频（动态背景，在线真播）",
         };
         String cur = prefs.loadAerialSource();
         int curIdx = 0;
@@ -1245,6 +1246,7 @@ public class HomeSettingsActivity extends Activity {
             case "apple": return "仅 Apple 视频";
             case "wallhaven": return "仅 Wallhaven";
             case "w360": return "仅 360 图库";
+            case "video": return "航拍视频（动态）";
             default: return "自动";
         }
     }
