@@ -32,7 +32,7 @@ import java.util.Random;
 final class AerialWallpaperPlayer implements SurfaceHolder.Callback {
 
     /** Give a clip this long to become playable before falling back to the still. */
-    private static final long PREPARE_TIMEOUT_MS = 12_000L;
+    private static final long PREPARE_TIMEOUT_MS = 6_000L;
     /** How long to wait before retrying after a hard failure (network down, etc.). */
     private static final long RETRY_MS = 60_000L;
 
@@ -103,13 +103,20 @@ final class AerialWallpaperPlayer implements SurfaceHolder.Callback {
         if (clips.isEmpty()) return;
         boolean wasStopped = stopped;
         stopped = false;
-        if (surfaceReady && (!playing || wasStopped)) playRandom();
+        if (!surfaceReady) {
+            // The surface is parked (GONE) while idle; showing it triggers surfaceCreated,
+            // which calls back into playRandom().
+            surface.setVisibility(android.view.View.VISIBLE);
+            return;
+        }
+        if (!playing || wasStopped) playRandom();
     }
 
     /** Pause playback and reveal the static still (desktop away, or aerial rotation turned off). */
     void pause() {
         stopped = true;
         releasePlayer();
+        surface.setVisibility(android.view.View.GONE);   // park the hole with the window
         setPlaying(false);
     }
 
@@ -148,7 +155,12 @@ final class AerialWallpaperPlayer implements SurfaceHolder.Callback {
 
     /** Plays the clip `step` away from the current one (wraps around); 0 = a fresh random pick. */
     private void playAnother(int step) {
-        if (clips.isEmpty() || stopped || !surfaceReady) return;
+        if (clips.isEmpty() || stopped) return;
+        if (!surfaceReady) {
+            // Parked surface: show it and wait for surfaceCreated to resume the attempt.
+            surface.setVisibility(android.view.View.VISIBLE);
+            return;
+        }
         int pick;
         if (step == 0) {
             pick = clips.size() > 1 ? random.nextInt(clips.size() - 1) : 0;
@@ -188,9 +200,12 @@ final class AerialWallpaperPlayer implements SurfaceHolder.Callback {
         handler.removeCallbacks(prepareTimeout);
         releasePlayer();
         setPlaying(false);     // reveal the static still
+        // Park the surface too: an idle SurfaceView composites as opaque black on some boxes
+        // (Phicomm T1), which would cover the still even with the wallpaper layered correctly.
+        surface.setVisibility(android.view.View.GONE);
         // Stay in active mode but wait before retrying — the TV may reconnect overnight.
         handler.postDelayed(() -> {
-            if (!stopped && surfaceReady) playRandom();
+            if (!stopped) playRandom();   // re-shows the surface when it retries
         }, RETRY_MS);
     }
 

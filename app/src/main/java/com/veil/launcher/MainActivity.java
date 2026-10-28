@@ -363,6 +363,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         aerialVideoView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         root.addView(aerialVideoView, 0);   // backmost child; the video composites behind the window UI
+        // Parked while idle: an empty SurfaceView composites as an opaque black layer on some
+        // boxes (Phicomm T1), which would black out the whole desktop. The player reveals it
+        // only while a clip is actually preparing/playing and parks it again on failure.
+        aerialVideoView.setVisibility(View.GONE);
         aerialVideo = new AerialWallpaperPlayer(this, aerialVideoView, playing -> {
             if (wallpaperView != null) {
                 wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
@@ -634,7 +638,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (wallpaperView == null) {
             wallpaperView = new android.widget.ImageView(this);
             wallpaperView.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-            root.addView(wallpaperView, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            // Layer above the aerial-video surface (index 0): adding at 0 would slot the
+            // wallpaper UNDER the SurfaceView, and the surface's punched-out region then
+            // hides the still — the desktop read as permanently black on the Phicomm T1.
+            int above = aerialVideoView != null ? root.indexOfChild(aerialVideoView) + 1 : 0;
+            root.addView(wallpaperView, above, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             wallpaperView.setImageBitmap(bmp);
             // The dock band frost crops straight from this bitmap (inspired by Tigris).
             if (dockDecoration != null) dockDecoration.setWallpaperBitmap(bmp);
