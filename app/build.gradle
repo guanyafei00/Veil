@@ -14,14 +14,12 @@ android {
         versionName '2.1.2'
     }
 
-    // Two packages, one codebase:
-    //   full — ships the 24 bundled aerial stills (app/src/full/assets/aerial_still, 5.5 MB): the
-    //          aerial expander ALWAYS works, offline, straight after the install.
-    //   lite — the same app without those stills: the APK drops back to ~0.5 MB and the aerial
-    //          expander goes to the network path (the 360 gallery, China-reachable).
-    // Build rationale: the full package was too heavy to sideload. The stills live in the
-    // FLAVOR's asset folder (not excluded from main): that is the only way AGP keeps them out
-    // of the lite build (a flavor-level assets.exclude does not filter main's files).
+    // Two packages, one codebase. As of v2.1.2 the wallpapers are ONLINE-ONLY by owner's call:
+    //   the 24 bundled aerial stills were removed, so neither flavor ships any wallpaper pictures
+    //   except the single offline safety net default_wallpaper.jpg (app/src/{full,lite}/assets).
+    //   Bing, 360, Apple aerial video and Wallhaven all fetch live from the network now.
+    //   full / lite are kept only for the handed-over APK naming (Veil-TV-full / Veil-TV-lite);
+    //   their asset folders are now identical, so the two APKs are the same size.
     flavorDimensions 'bundle'
     productFlavors {
         full {
