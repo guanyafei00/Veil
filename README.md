@@ -8,14 +8,23 @@ tvOS 风格的 Android TV / 盒子桌面（launcher），干净、轻量、纯�
 
 | 安装包 | 体积 | 说明 |
 | --- | --- | --- |
-| [Veil-TV-v2.1.0-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.0/Veil-TV-v2.1.0-full.apk) | 6.9 MB | 含 24 张预置航拍静图 + 真 4K（3840×2160）默认壁纸，航拍扩充离线可用 |
-| [Veil-TV-v2.1.0-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.0/Veil-TV-v2.1.0-lite.apk) | 0.6 MB | 不含预置航拍图库，功能完全一致，航拍扩充走网络（360 图库，国内直连） |
+| [Veil-TV-v2.1.1-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.1/Veil-TV-v2.1.1-full.apk) | 6.6 MB | 含 24 张预置航拍静图 + 真 4K（3840×2160）默认壁纸，航拍扩充离线可用 |
+| [Veil-TV-v2.1.1-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.1/Veil-TV-v2.1.1-lite.apk) | 0.57 MB | 不含预置航拍图库，功能完全一致，航拍扩充走网络（360 图库，国内直连） |
 
 ```bash
-adb install -r Veil-TV-v2.1.0-lite.apk
+adb install -r Veil-TV-v2.1.1-lite.apk
 ```
 
 两个包包名相同（`com.veil.launcher`），可互相覆盖安装。安装后在系统设置里把 Veil 设为默认桌面。
+
+### v2.1.1：修复 Android 6 盒子点击桌面图标无反应
+
+这一版只修一个但很致命的问题，改动在 Android 6（API 23）电视盒子上验证：
+
+- **桌面图标点不动**：旧版首次点击应用图标会请求屏幕录制授权（MediaProjection 弹窗），
+  而部分 Android 6 遥控器环境该弹窗根本不弹出，授权回调永远不触发，应用也就起不来。
+  本版把「内容预览」默认改为关闭，并且在 Android 6 及以下**直接启动应用、跳过授权流程**，
+  桌面图标点击立即生效。Android 7+ 设备仍可在设置里手动开启内容预览。
 
 ### v2.1.0：壁纸图库预览、图标自由换位、长按卸载应用
 
