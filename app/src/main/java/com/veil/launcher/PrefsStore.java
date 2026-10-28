@@ -75,6 +75,9 @@ final class PrefsStore {
     private static final String KEY_AERIAL_STILL_RES = "aerial_still_res";
     /** Aerial expansion source: auto | apple | wallhaven | w360 (the owner's manual override). */
     private static final String KEY_AERIAL_SOURCE = "aerial_source";
+    /** Desktop aerial video (the moving Apple-TV-style background): on/off, driven only by the
+     *  信源 (HDMI) selector's "航拍视频" row — deliberately NOT tied to the wallpaper source. */
+    private static final String KEY_AERIAL_VIDEO_ON = "aerial_video_on";
     /** First page shows the dock row (off = pure wallpaper page, the dock apps join the grid). */
     private static final String KEY_DOCK_VISIBLE = "dock_visible";
     /** Dock focus swaps the wallpaper for the focused app's own banner art (Apple TV style). */
@@ -582,6 +585,15 @@ final class PrefsStore {
 
     void saveAerialSource(String source) {
         sp.edit().putString(KEY_AERIAL_SOURCE, source).apply();
+    }
+
+    /** The moving desktop aerial video (Apple-TV-style background) is on. Set only by the 信源 menu. */
+    boolean isAerialVideoOn() {
+        return sp.getBoolean(KEY_AERIAL_VIDEO_ON, false);
+    }
+
+    void setAerialVideoOn(boolean on) {
+        sp.edit().putBoolean(KEY_AERIAL_VIDEO_ON, on).apply();
     }
 
     /** Dock edits live over the config defaults; this drops back to them (settings row). */

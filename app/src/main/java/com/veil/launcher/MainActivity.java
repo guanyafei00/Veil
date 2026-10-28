@@ -1057,17 +1057,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * Starts or stops the desktop aerial video. The moving Apple aerial plays whenever the owner's
-     * wallpaper is the Apple aerial source (auto/apple) with auto-rotate on — that is the
-     * "航拍视频真播" the owner asked for, showing live without any trip into Settings. When it is
-     * off, the static still stays (this is a no-op if the player is already in the right state).
+     * Starts or stops the desktop aerial video. This is driven ONLY by the 信源 (HDMI) selector's
+     * "航拍视频" switch — it is deliberately independent of the wallpaper source. When on, the
+     * moving Apple aerial plays on the desktop; when off, the static still stays. No-op if the
+     * player is already in the right state.
      */
     private void updateAerialVideo() {
         if (aerialVideo == null) return;
-        String src = prefs.loadAerialSource();
-        boolean want = prefs.isAerialRotateOn()
-                && ("auto".equals(src) || "apple".equals(src));
-        if (want) {
+        if (prefs.isAerialVideoOn()) {
             if (!aerialVideo.isActive()) aerialVideo.start();
         } else {
             aerialVideo.stop();
@@ -2854,14 +2851,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             final Intent liveTvIntent = liveTv;
             addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.live_tv), -1, () -> open(liveTvIntent));
         }
-        // Desktop aerial video, reachable straight from the 信源 menu — the owner's parents no
-        // longer need to open Settings to get the moving Apple-TV-style aerial on the desktop.
+        // Desktop aerial video, reachable straight from the 信源 (HDMI) selector — tap to toggle the
+        // moving Apple-TV-style background on/off, independent of any wallpaper setting.
         if (rows.getChildCount() > 0) addSeparator(rows);
-        addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.aerial_video), -1, () -> {
-            prefs.setAerialRotateOn(true);
-            prefs.saveAerialSource("apple");
-            updateAerialVideo();
-        });
+        addInputRow(rows, popup, R.drawable.ic_livetv, getString(R.string.aerial_video),
+                prefs.isAerialVideoOn() ? TvInputManager.INPUT_STATE_CONNECTED : -1,
+                () -> {
+                    prefs.setAerialVideoOn(!prefs.isAerialVideoOn());
+                    updateAerialVideo();
+                });
         if (rows.getChildCount() == 0) {
             Toast.makeText(this, R.string.no_inputs, Toast.LENGTH_SHORT).show();
             return;
