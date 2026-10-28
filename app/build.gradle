@@ -10,7 +10,7 @@ android {
         applicationId 'com.veil.launcher'
         minSdk 23
         targetSdk 34
-        versionCode 213
+        versionCode 214
         versionName '2.1.3'
     }
 

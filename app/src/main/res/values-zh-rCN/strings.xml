@@ -247,4 +247,46 @@
     <string name="control_done">已通过本机调试通道发送</string>
     <string name="control_fail">连不上调试端口（5555）。请先打开盒子的网络调试。</string>
     <string name="control_waiting">等待授权中…请看电视屏幕，选择"允许"</string>
+
+    <!-- 卡片模块（第三方应用的桌面卡片） -->
+    <string name="card_app_name">应用：%1$s</string>
+    <string name="card_keep_hidden">保持隐藏</string>
+    <string name="card_not_saved">未能保存选择</string>
+    <string name="card_prompt_body">%1$s 想在桌面上显示一张卡片。选择隐藏后，应用原本的图标保持不变。</string>
+    <string name="card_prompt_hint">以后可以改：长按 OK 键打开设置。</string>
+    <string name="card_prompt_identity">%1$s，密钥 %2$s</string>
+    <string name="card_prompt_names">卡片名：「%1$s」，应用：「%2$s」。</string>
+    <string name="card_prompt_relabelled">%1$s 的卡片改名了，请重新决定是否显示。</string>
+    <string name="card_prompt_resigned">%1$s 更新后签名变了，之前的选择已失效，请重新决定。</string>
+    <string name="card_prompt_title">来自 %1$s 的新卡片</string>
+    <string name="card_show">显示卡片</string>
+    <string name="card_state_hidden">已隐藏</string>
+    <string name="card_state_new">新</string>
+    <string name="card_state_new_key">新密钥</string>
+    <string name="card_state_new_label">新名称</string>
+    <string name="card_state_over_limit">显示中，超出 8 个上限</string>
+    <string name="card_state_shown">显示中</string>
+    <string name="module_cards">模块卡片</string>
+    <string name="no_module_cards">未安装模块卡片</string>
+    <!-- 桌面守护 / 液态玻璃 -->
+    <string name="guard_button">桌面守护（看门狗）</string>
+    <string name="guard_off">桌面守护已关闭</string>
+    <string name="guard_on">桌面守护已开启</string>
+    <string name="guard_service">守护服务状态</string>
+    <string name="guard_service_description">保持本应用为电视桌面：当其他桌面/启动器抢占屏幕时，自动把桌面拉回来。不影响视频、游戏等普通应用。</string>
+    <string name="guard_service_hint">在列表中找到「桌面守护」并开启</string>
+    <string name="guard_service_name">桌面守护</string>
+    <string name="guard_service_off">未授权 — 点此开启</string>
+    <string name="guard_service_on">运行中</string>
+    <string name="liquid_glass">液态玻璃</string>
+    <string name="liquid_glass_off">液态玻璃已关闭</string>
+    <string name="liquid_glass_on">液态玻璃已开启</string>
+    <!-- 遥控器按键 / 系统 -->
+    <string name="home_key_description">让遥控器的主页键打开本桌面。</string>
+    <string name="home_key_name">遥控器主页键</string>
+    <string name="home_settings">默认桌面</string>
+    <string name="home_settings_help">在系统设置里选择主屏幕应用，然后按遥控器主页键。</string>
+    <string name="input_key_service_description">按遥控器的信源键时打开信源切换。</string>
+    <string name="vpn">VPN</string>
+    <string name="vpn_off">VPN 关闭</string>
 </resources>
