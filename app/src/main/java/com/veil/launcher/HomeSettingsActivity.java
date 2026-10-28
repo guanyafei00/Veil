@@ -94,6 +94,8 @@ public class HomeSettingsActivity extends Activity {
         float r = 28 * d;
         if (prefs.isLiquidGlassOn() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Apple-style frosted panel: the live desktop shows through, genuinely blurred behind it.
+            // Panel stays dark smoked glass in both moods: every label on it is white, a
+            // light day panel would erase the contrast. Day/night lives on the dock frost.
             panelBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
             panelBg.setColors(new int[]{0x4D23262E, 0x3A16181E});
             panelBg.setStroke(1, 0x42FFFFFF);

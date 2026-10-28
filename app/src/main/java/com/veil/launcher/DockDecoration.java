@@ -53,6 +53,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private Bitmap frost;
     private int frostX = Integer.MAX_VALUE, frostY = Integer.MAX_VALUE;
     private int frostW = -1, frostH = -1;
+    /** The mood the cached frost was rendered in: a clock flip must re-render (day ↔ night). */
+    private boolean frostNight = GlassTheme.isNight();
     /** The dock frosted glass switch (owner's panel toggle): off falls back to the dark gradient. */
     private boolean frostEnabled = true;
     /** The last frost render failed (OOM): stop retrying per frame until the inputs change. */
@@ -179,7 +181,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
                 // 2-px quantisation: sub-pixel scroll jitter must not re-trigger the blur.
                 int gx = (loc[0] + Math.round(rect.left)) & ~1;
                 int gy = (loc[1] + Math.round(rect.top)) & ~1;
-                if (frost == null || w != frostW || h != frostH || gx != frostX || gy != frostY) {
+                if (frost == null || w != frostW || h != frostH || gx != frostX || gy != frostY
+                        || GlassTheme.isNight() != frostNight) {
                     android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
                     Bitmap nf = FrostGlass.renderRegion(wallpaper,
                             dm.widthPixels, dm.heightPixels, gx, gy, w, h);
@@ -187,6 +190,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
                         if (frost != null) frost.recycle();
                         frost = nf;
                         frostX = gx; frostY = gy; frostW = w; frostH = h;
+                        frostNight = GlassTheme.isNight();
                     } else {
                         // A failed render (OOM) used to retry every frame: frost ↔ dark gradient
                         // alternation read as flicker. Stick with the fallback until the

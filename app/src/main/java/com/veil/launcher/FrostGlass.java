@@ -98,11 +98,18 @@ final class FrostGlass {
         px = boxBlur(px, halfW, halfH, radius2);
         cropped.setPixels(px, 0, halfW, 0, 0, halfW, halfH);
 
-        // Darken a little so white text on top stays readable, whatever the wallpaper is.
+        // Mood veil: at night a dark scrim keeps white text readable; in daylight the band
+        // turns milky bright instead — sunlit frosted glass rather than a smoked slab. A
+        // whisper of dark rides along in the day veil so focused labels never wash out.
         Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
         Canvas oc = new Canvas(out);
         oc.drawBitmap(cropped, 0, 0, null);
-        oc.drawColor(0x3A000000);
+        if (GlassTheme.isNight()) {
+            oc.drawColor(0x3A000000);
+        } else {
+            oc.drawColor(0x2EFFFFFF);
+            oc.drawColor(0x14000000);
+        }
         cropped.recycle();
         return out;
     }
