@@ -2231,6 +2231,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             adapter.startApp(e);
             return;
         }
+        // Android 6 and below (and TVs whose MediaProjection consent dialog cannot surface)
+        // must never block the app launch on the screen-capture consent: start the app
+        // directly. The content preview simply stays off on those devices.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            adapter.startApp(e);
+            return;
+        }
         pendingLaunchEntry = e;
         try {
             startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CAPTURE);

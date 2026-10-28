@@ -372,9 +372,9 @@ final class PrefsStore {
         sp.edit().putBoolean(KEY_HERO_ART, on).apply();
     }
 
-    /** Default true: the focused app's big picture prefers its own captured screen. */
+    /** Default false: the focused app's big picture prefers its own captured screen. */
     boolean isPreviewOn() {
-        return sp.getBoolean(KEY_PREVIEW_ON, true);
+        return sp.getBoolean(KEY_PREVIEW_ON, false);
     }
 
     void setPreviewOn(boolean on) {
@@ -645,7 +645,7 @@ final class PrefsStore {
             json.put("screensaver_on", sp.getBoolean(KEY_SCREENSAVER_ON, false));
             json.put("screensaver_delay_min", sp.getInt(KEY_SCREENSAVER_DELAY, 5));
             json.put("screensaver_clock", sp.getBoolean(KEY_SCREENSAVER_CLOCK, true));
-            json.put("preview_on", sp.getBoolean(KEY_PREVIEW_ON, true));
+            json.put("preview_on", sp.getBoolean(KEY_PREVIEW_ON, false));
             json.put("bing_rotate", sp.getBoolean(KEY_BING_ROTATE, false));
             json.put("bing_interval_min", sp.getInt(KEY_BING_INTERVAL, 1440));
             json.put("aerial_used_urls", new JSONArray(new ArrayList<>(loadAerialUsedUrls())));
@@ -695,7 +695,7 @@ final class PrefsStore {
                         .apply();
             }
             if (json.has("preview_on")) {
-                sp.edit().putBoolean(KEY_PREVIEW_ON, json.optBoolean("preview_on", true)).apply();
+                sp.edit().putBoolean(KEY_PREVIEW_ON, json.optBoolean("preview_on", false)).apply();
             }
             if (json.has("bing_rotate")) {
                 sp.edit().putBoolean(KEY_BING_ROTATE, json.optBoolean("bing_rotate", false))

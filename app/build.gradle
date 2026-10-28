@@ -10,8 +10,8 @@ android {
         applicationId 'com.veil.launcher'
         minSdk 23
         targetSdk 34
-        versionCode 210
-        versionName '2.1.0'
+        versionCode 211
+        versionName '2.1.1'
     }
 
     // Two packages, one codebase:
@@ -19,7 +19,7 @@ android {
     //          aerial expander ALWAYS works, offline, straight after the install.
     //   lite — the same app without those stills: the APK drops back to ~0.5 MB and the aerial
     //          expander goes to the network path (the 360 gallery, China-reachable).
-    // The owner's pick: the big package was too heavy to sideload. The stills live in the
+    // Build rationale: the full package was too heavy to sideload. The stills live in the
     // FLAVOR's asset folder (not excluded from main): that is the only way AGP keeps them out
     // of the lite build (a flavor-level assets.exclude does not filter main's files).
     flavorDimensions 'bundle'
