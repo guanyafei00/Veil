@@ -39,6 +39,10 @@ final class PrefsStore {
     private static final String KEY_FOLDERS = "folders";
     private static final String KEY_LOCK_ENABLED = "lock_enabled";
     private static final String KEY_LOCK_PASSWORD = "lock_password";
+    /** Launcher guard (the invisible watchdog): keeps this desktop as THE desktop by pulling it back
+     *  whenever another HOME/launcher app takes the foreground. Default ON — the owner's ask is that
+     *  the parents' TV stays on this launcher. */
+    private static final String KEY_GUARD_ENABLED = "guard_enabled";
     private static final String KEY_COLUMNS = "dock_columns";
     private static final String KEY_TOP_BAR_COLOR = "top_bar_color";
     private static final String KEY_TOP_TEXT_COLOR = "top_text_color";
@@ -180,6 +184,15 @@ final class PrefsStore {
 
     void setLockEnabled(boolean on) {
         sp.edit().putBoolean(KEY_LOCK_ENABLED, on).apply();
+    }
+
+    /** The launcher guard is on by default — the desktop should stay as THE desktop. */
+    boolean isGuardEnabled() {
+        return sp.getBoolean(KEY_GUARD_ENABLED, true);
+    }
+
+    void setGuardEnabled(boolean on) {
+        sp.edit().putBoolean(KEY_GUARD_ENABLED, on).apply();
     }
 
     String loadLockPassword() {

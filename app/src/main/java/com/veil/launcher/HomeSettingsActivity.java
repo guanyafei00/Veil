@@ -63,7 +63,7 @@ public class HomeSettingsActivity extends Activity {
 
     // Values that refresh when a dialog changes a pref; rebuilt per category, so every access
     // is null-guarded (a row that was never built simply has no live TextView).
-    private TextView lockValue, lockServiceValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
+    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
             bingRotateValue, aerialExpandValue, aerialResValue, aerialSourceValue,
             w360CatValue, w360ExpandValue, w360RotateValue,
             dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
@@ -468,6 +468,11 @@ public class HomeSettingsActivity extends Activity {
         // runs and opens the system page where it is allowed — no more hunting through the ROM.
         row(getString(R.string.lock_service), lockServiceValue = new TextView(this),
                 v -> openAccessibilitySettings());
+        // Launcher guard: the invisible watchdog. On by default; the toggle flips the pref, the
+        // second row shows whether its accessibility service is allowed and opens that page.
+        row(getString(R.string.guard_button), guardValue = new TextView(this), v -> toggleGuard());
+        row(getString(R.string.guard_service), guardServiceValue = new TextView(this),
+                v -> openAccessibilitySettings());
         row(getString(R.string.backup), null, v -> backup());
         row(getString(R.string.restore), null, v -> restore());
         row(getString(R.string.panel_control), null, v -> showControlCenter());
@@ -582,6 +587,9 @@ public class HomeSettingsActivity extends Activity {
         set(lockValue, prefs.isLockEnabled() ? "开" : "关");
         set(lockServiceValue, lockServiceEnabled()
                 ? getString(R.string.lock_service_on) : getString(R.string.lock_service_off));
+        set(guardValue, prefs.isGuardEnabled() ? "开" : "关");
+        set(guardServiceValue, guardServiceEnabled()
+                ? getString(R.string.guard_service_on) : getString(R.string.guard_service_off));
         set(systemHomeValue, isDefaultHome()
                 ? getString(R.string.system_home_is_default) : getString(R.string.system_home_not_default));
         set(screensaverValue, prefs.isScreensaverOn() ? "开" : "关");
@@ -1006,6 +1014,14 @@ public class HomeSettingsActivity extends Activity {
         });
     }
 
+    /** Flips the guard watchdog (no password — it is harmless to toggle). */
+    private void toggleGuard() {
+        boolean on = !prefs.isGuardEnabled();
+        prefs.setGuardEnabled(on);
+        Toast.makeText(this, on ? R.string.guard_on : R.string.guard_off, Toast.LENGTH_SHORT).show();
+        refreshValues();
+    }
+
     /** The lock only bites once the LockService accessibility service is enabled in system settings. */
     private void showLockGuide() {
         Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
@@ -1061,6 +1077,25 @@ public class HomeSettingsActivity extends Activity {
             int slash = e.indexOf('/');
             if (slash > 0 && e.substring(0, slash).equalsIgnoreCase(pkg)
                     && e.substring(slash + 1).endsWith("LockService")) return true;
+        }
+        return false;
+    }
+
+    /** Whether the launcher-guard accessibility service is actually allowed to run. */
+    private boolean guardServiceEnabled() {
+        String enabled = Settings.Secure.getString(getContentResolver(),
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        if (enabled == null || enabled.isEmpty()) return false;
+        String pkg = getPackageName();
+        String cls = LauncherGuardService.class.getName();
+        String full = pkg + "/" + cls;
+        String shortForm = pkg + "/." + cls.substring(cls.lastIndexOf('.') + 1);
+        for (String s : enabled.split(":")) {
+            String e = s.trim();
+            if (e.equalsIgnoreCase(full) || e.equalsIgnoreCase(shortForm)) return true;
+            int slash = e.indexOf('/');
+            if (slash > 0 && e.substring(0, slash).equalsIgnoreCase(pkg)
+                    && e.substring(slash + 1).endsWith("LauncherGuardService")) return true;
         }
         return false;
     }

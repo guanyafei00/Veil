@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Only for the optional weather clock (Open-Meteo, no key); everything else stays offline. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Pulls the desktop back up on boot / after an update (gated by the launcher-guard switch). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Needed on Android 10 to read the Wi-Fi network name; granted over adb at install time. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- The long-press "delete app" action starts the system uninstaller for another package.
@@ -179,5 +181,32 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/lock_service" />
         </service>
+
+        <!-- Launcher guard: the invisible watchdog. If another home/launcher app takes the screen,
+             it pulls this desktop back; see LauncherGuardService. Always runs while enabled in
+             Accessibility settings, independent of the desktop lock. -->
+        <service
+            android:name=".LauncherGuardService"
+            android:label="@string/guard_service_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/launcher_guard_service" />
+        </service>
+
+        <!-- Brings the desktop up on boot / after an update, gated by the launcher-guard switch. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

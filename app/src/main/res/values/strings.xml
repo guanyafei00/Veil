@@ -112,11 +112,15 @@
     <string name="lock_disable_ask">Enter the password to turn the lock off</string>
     <string name="lock_on">Launcher lock is on</string>
     <string name="lock_off">Launcher lock is off</string>
+    <string name="guard_on">Launcher guard is on</string>
+    <string name="guard_off">Launcher guard is off</string>
     <string name="lock_guide_title">Enable the accessibility service</string>
     <string name="lock_guide_message">The lock works through an accessibility service. Open system Accessibility settings, find "Launcher lock" and turn it on. While locked, the system Settings app and the stock launcher bounce straight back to this home screen, so the desktop cannot be replaced, reset or uninstalled. Normal apps are not affected.</string>
     <string name="lock_go_accessibility">Open accessibility settings</string>
     <string name="lock_service_name">Launcher lock</string>
     <string name="lock_service_description">While the desktop lock is on, bounces the system Settings app and the stock launcher back to this home screen, so the launcher cannot be replaced or removed.</string>
+    <string name="guard_service_name">Launcher guard</string>
+    <string name="guard_service_description">Keeps this launcher as the desktop: if another home/launcher app ever takes the screen, this pulls the desktop back automatically. Normal apps (video, games) are untouched.</string>
     <string name="desktop_entry">Veil desktop</string>
 
     <!-- Settings panel: dock size, wallpaper, system settings shortcut. -->
@@ -268,6 +272,11 @@
     <string name="lock_service_on">Running</string>
     <string name="lock_service_off">Not allowed — open</string>
     <string name="lock_service_hint">Find "Launcher lock" in the list and turn it on</string>
+    <string name="guard_button">Launcher guard (watchdog)</string>
+    <string name="guard_service">Guard service</string>
+    <string name="guard_service_on">Running</string>
+    <string name="guard_service_off">Not allowed — open</string>
+    <string name="guard_service_hint">Find "Launcher guard" in the list and turn it on</string>
     <string name="control_reboot">Reboot the box</string>
     <string name="control_poweroff">Power off the box</string>
     <string name="control_info">Device info</string>
