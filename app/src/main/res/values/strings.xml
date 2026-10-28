@@ -114,6 +114,9 @@
     <string name="lock_off">Launcher lock is off</string>
     <string name="guard_on">Launcher guard is on</string>
     <string name="guard_off">Launcher guard is off</string>
+    <string name="liquid_glass">Liquid glass UI</string>
+    <string name="liquid_glass_on">Liquid glass is on</string>
+    <string name="liquid_glass_off">Liquid glass is off</string>
     <string name="lock_guide_title">Enable the accessibility service</string>
     <string name="lock_guide_message">The lock works through an accessibility service. Open system Accessibility settings, find "Launcher lock" and turn it on. While locked, the system Settings app and the stock launcher bounce straight back to this home screen, so the desktop cannot be replaced, reset or uninstalled. Normal apps are not affected.</string>
     <string name="lock_go_accessibility">Open accessibility settings</string>

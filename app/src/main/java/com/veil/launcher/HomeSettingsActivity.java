@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
@@ -63,7 +64,7 @@ public class HomeSettingsActivity extends Activity {
 
     // Values that refresh when a dialog changes a pref; rebuilt per category, so every access
     // is null-guarded (a row that was never built simply has no live TextView).
-    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
+    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, liquidGlassValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
             bingRotateValue, aerialExpandValue, aerialResValue, aerialSourceValue,
             w360CatValue, w360ExpandValue, w360RotateValue,
             dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
@@ -90,8 +91,16 @@ public class HomeSettingsActivity extends Activity {
         plp.gravity = Gravity.END;
         panel.setLayoutParams(plp);
         GradientDrawable panelBg = new GradientDrawable();
-        panelBg.setColor(PAGE_BG);
         float r = 28 * d;
+        if (prefs.isLiquidGlassOn() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Apple-style frosted panel: the live desktop shows through, genuinely blurred behind it.
+            panelBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
+            panelBg.setColors(new int[]{0x4D23262E, 0x3A16181E});
+            panelBg.setStroke(1, 0x42FFFFFF);
+            getWindow().setBackgroundBlurRadius(110);
+        } else {
+            panelBg.setColor(PAGE_BG);
+        }
         panelBg.setCornerRadii(new float[]{r, r, 0, 0, 0, 0, r, r});
         panel.setBackground(panelBg);
         panel.setPadding((int) (28 * d), (int) (26 * d), (int) (22 * d), (int) (22 * d));
@@ -473,6 +482,9 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.guard_button), guardValue = new TextView(this), v -> toggleGuard());
         row(getString(R.string.guard_service), guardServiceValue = new TextView(this),
                 v -> openAccessibilitySettings());
+        // Liquid-glass UI (the owner's step-2 ask): frosted material + real backdrop blur where the
+        // box supports it; off falls back to the plain panel.
+        row(getString(R.string.liquid_glass), liquidGlassValue = new TextView(this), v -> toggleLiquidGlass());
         row(getString(R.string.backup), null, v -> backup());
         row(getString(R.string.restore), null, v -> restore());
         row(getString(R.string.panel_control), null, v -> showControlCenter());
@@ -590,6 +602,7 @@ public class HomeSettingsActivity extends Activity {
         set(guardValue, prefs.isGuardEnabled() ? "开" : "关");
         set(guardServiceValue, guardServiceEnabled()
                 ? getString(R.string.guard_service_on) : getString(R.string.guard_service_off));
+        set(liquidGlassValue, prefs.isLiquidGlassOn() ? "开" : "关");
         set(systemHomeValue, isDefaultHome()
                 ? getString(R.string.system_home_is_default) : getString(R.string.system_home_not_default));
         set(screensaverValue, prefs.isScreensaverOn() ? "开" : "关");
@@ -1019,6 +1032,14 @@ public class HomeSettingsActivity extends Activity {
         boolean on = !prefs.isGuardEnabled();
         prefs.setGuardEnabled(on);
         Toast.makeText(this, on ? R.string.guard_on : R.string.guard_off, Toast.LENGTH_SHORT).show();
+        refreshValues();
+    }
+
+    /** Flips the liquid-glass UI (needs a settings reopen to re-apply the panel blur). */
+    private void toggleLiquidGlass() {
+        boolean on = !prefs.isLiquidGlassOn();
+        prefs.setLiquidGlassOn(on);
+        Toast.makeText(this, on ? R.string.liquid_glass_on : R.string.liquid_glass_off, Toast.LENGTH_SHORT).show();
         refreshValues();
     }
 

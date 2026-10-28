@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Liquid-glass panel: translucent material + top specular sheen + refined bright border.
+     The genuine backdrop blur (where supported) is applied in code via Window.setBackgroundBlurRadius;
+     this drawable supplies the glass material on every API level. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="270" android:startColor="#F22A2A2E" android:endColor="#F5161618" />
-            <stroke android:width="1dp" android:color="#33FFFFFF" />
-            <corners android:radius="20dp" />
+            <gradient android:angle="270"
+                android:startColor="#3D23262E"
+                android:endColor="#2A16181E" />
+            <stroke android:width="1dp" android:color="#42FFFFFF" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <!-- top specular sheen: light hits the upper edge of the glass -->
+    <item android:bottom="72dp">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270"
+                android:startColor="#1FFFFFFF"
+                android:endColor="#00FFFFFF" />
         </shape>
     </item>
 </layer-list>

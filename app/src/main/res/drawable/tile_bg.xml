@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#FF1C1C1E" />
-    <corners android:radius="16dp" />
-</shape>
+<!-- App / dock tile: translucent glass instead of flat black, with a faint top sheen + rim so the
+     live wallpaper reads through it like Apple's glassy app cells. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270"
+                android:startColor="#33F2F3F7"
+                android:endColor="#22FFFFFF" />
+            <stroke android:width="1dp" android:color="#2EFFFFFF" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+    <item android:bottom="28dp">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270"
+                android:startColor="#14FFFFFF"
+                android:endColor="#00FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

@@ -43,6 +43,8 @@ final class PrefsStore {
      *  whenever another HOME/launcher app takes the foreground. Default ON — the owner's ask is that
      *  the parents' TV stays on this launcher. */
     private static final String KEY_GUARD_ENABLED = "guard_enabled";
+    /** Liquid-glass UI: the frosted / sheen material + (on API 31+) real window backdrop blur. */
+    private static final String KEY_LIQUID_GLASS = "liquid_glass";
     private static final String KEY_COLUMNS = "dock_columns";
     private static final String KEY_TOP_BAR_COLOR = "top_bar_color";
     private static final String KEY_TOP_TEXT_COLOR = "top_text_color";
@@ -193,6 +195,15 @@ final class PrefsStore {
 
     void setGuardEnabled(boolean on) {
         sp.edit().putBoolean(KEY_GUARD_ENABLED, on).apply();
+    }
+
+    /** The liquid-glass UI is on by default — the frosted material looks better on every TV. */
+    boolean isLiquidGlassOn() {
+        return sp.getBoolean(KEY_LIQUID_GLASS, true);
+    }
+
+    void setLiquidGlassOn(boolean on) {
+        sp.edit().putBoolean(KEY_LIQUID_GLASS, on).apply();
     }
 
     String loadLockPassword() {

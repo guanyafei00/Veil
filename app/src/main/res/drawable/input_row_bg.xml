@@ -1,10 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Input / card row: transparent at rest, glassy material on focus so the selection reads as a
+     lit glass slab (Apple-style) rather than a flat fill. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#F5FFFFFF" />
-            <corners android:radius="13dp" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270"
+                        android:startColor="#E6FFFFFF"
+                        android:endColor="#C8FFFFFF" />
+                    <stroke android:width="1dp" android:color="#66FFFFFF" />
+                    <corners android:radius="13dp" />
+                </shape>
+            </item>
+            <item android:bottom="14dp">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270"
+                        android:startColor="#30FFFFFF"
+                        android:endColor="#00FFFFFF" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
     <item>
         <shape android:shape="rectangle">
