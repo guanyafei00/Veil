@@ -262,7 +262,8 @@
     <string name="section_wallpaper">Wallpaper</string>
     <string name="section_screensaver">Screensaver</string>
     <string name="section_clock">Clock &amp; weather</string>
-    <string name="section_system">System</string>
+    <string name="section_system">Settings</string>
+    <string name="section_veil">Veil</string>
     <string name="panel_screensaver">Screensaver</string>
     <string name="screensaver_on">Screensaver on: the aerial stills and the Bing picture take over when the desktop is idle</string>
     <string name="screensaver_off">Screensaver off</string>

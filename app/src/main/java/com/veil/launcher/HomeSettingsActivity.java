@@ -35,7 +35,7 @@ import java.util.Set;
  * The launcher's settings, AT4K/Aerial style: a half-screen panel on the right that rides over
  * the live desktop (the window is translucent, the left half is a dimmed scrim), never covering
  * the whole screen. Level one is the category list (desktop / wallpaper / screensaver / clock /
- * system); picking one opens level two — that category's rows — and Back returns to the list.
+ * settings); picking one opens level two — that category's rows — and Back returns to the list.
  * Rows are built in code — one helper, no button IDs — and every row reuses the dialogs this
  * panel always had; the home screen adopts changes on resume.
  */
@@ -475,6 +475,12 @@ public class HomeSettingsActivity extends Activity {
     }
 
     private void buildSystemRows() {
+        // Standalone item: jump straight into the device's own Android settings (separate from
+        // Veil's own settings below).
+        row(getString(R.string.panel_system_settings), null, v -> systemSettings());
+        divider();
+        sectionHeader(getString(R.string.section_veil));
+        // Veil's own desktop settings:
         row(getString(R.string.lock_button), lockValue = new TextView(this), v -> toggleLock());
         // The lock is an accessibility service the owner must allow once; this row shows whether it
         // runs and opens the system page where it is allowed — no more hunting through the ROM.
@@ -491,10 +497,37 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.backup), null, v -> backup());
         row(getString(R.string.restore), null, v -> restore());
         row(getString(R.string.panel_control), null, v -> showControlCenter());
-        row(getString(R.string.panel_system_settings), null, v -> systemSettings());
         // The row's value shows whether this desktop IS the default home right now.
         row(getString(R.string.system_home), systemHomeValue = new TextView(this), v -> systemHome());
         row(getString(R.string.panel_about), null, v -> showStorageInfo());
+    }
+
+    /** A thin separator line between the standalone system-settings item and Veil's own rows. */
+    private void divider() {
+        float d = getResources().getDisplayMetrics().density;
+        View v = new View(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, (int) (1 * d)));
+        lp.setMargins((int) (22 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
+        v.setLayoutParams(lp);
+        v.setBackgroundColor(0x33FFFFFF);
+        list.addView(v);
+    }
+
+    /** A small non-focusable label that groups the rows beneath it (e.g. "Veil"). */
+    private void sectionHeader(String text) {
+        float d = getResources().getDisplayMetrics().density;
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextSize(12);
+        t.setLetterSpacing(0.14f);
+        t.setTextColor(HEADER_COLOR);
+        t.setFocusable(false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins((int) (22 * d), (int) (6 * d), (int) (18 * d), (int) (2 * d));
+        t.setLayoutParams(lp);
+        list.addView(t);
     }
 
     /** One tvOS row: label left, value right, chevron; white rounded card + slight zoom on focus. */

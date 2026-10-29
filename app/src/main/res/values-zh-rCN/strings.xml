@@ -227,7 +227,8 @@
     <string name="section_wallpaper">壁纸</string>
     <string name="section_screensaver">屏保</string>
     <string name="section_clock">时钟与天气</string>
-    <string name="section_system">系统</string>
+    <string name="section_system">设置</string>
+    <string name="section_veil">Veil</string>
     <string name="panel_screensaver">屏保</string>
     <string name="screensaver_on">屏保已开启：桌面空闲时自动播放航拍静图和必应壁纸，按任意键退出</string>
     <string name="screensaver_off">屏保已关闭</string>
