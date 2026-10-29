@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -700,18 +701,53 @@ public class HomeSettingsActivity extends Activity {
     }
 
     private void systemHome() {
-        try {
-            startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
-        } catch (ActivityNotFoundException | SecurityException unavailable) {
-            Toast.makeText(this, R.string.not_available, Toast.LENGTH_LONG).show();
-        }
+        // Some ROMs don't resolve the ACTION_HOME_SETTINGS action (or it points nowhere on a
+        // box that made Veil the only home): fall back to the flat system settings app, which
+        // always has a "default apps / home" entry.
+        openSettings(new Intent(Settings.ACTION_HOME_SETTINGS),
+                "com.android.settings", "com.android.tv.settings");
     }
 
     private void systemSettings() {
+        // Same robustness: the standard action resolves on most devices, but a few TV ROMs ship
+        // a renamed settings package that doesn't answer android.settings.SETTINGS — then launch
+        // the settings app's main activity directly so the row never dead-ends on a toast.
+        openSettings(new Intent(Settings.ACTION_SETTINGS),
+                "com.android.settings", "com.android.tv.settings");
+    }
+
+    /** Tries the given intent; if it doesn't resolve on this device, launches a known settings
+     *  package's main activity instead. Only toasts "not available" if nothing at all works. */
+    private void openSettings(Intent primary, String... fallbackPackages) {
         try {
-            startActivity(new Intent(Settings.ACTION_SETTINGS));
-        } catch (ActivityNotFoundException | SecurityException unavailable) {
-            Toast.makeText(this, R.string.not_available, Toast.LENGTH_LONG).show();
+            startActivity(primary);
+            return;
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            // fall through to package-based launch
+        }
+        PackageManager pm = getPackageManager();
+        // 2. any app that answers this settings action (covers OEM-renamed settings packages)
+        Intent query = new Intent(primary.getAction());
+        for (android.content.pm.ResolveInfo ri : pm.queryIntentActivities(query, 0)) {
+            if (ri.activityInfo == null) continue;
+            Intent i = new Intent(primary.getAction()).setPackage(ri.activityInfo.packageName);
+            if (startIfPossible(i)) return;
+        }
+        // 3. well-known settings packages' main activities as a last resort
+        for (String pkg : fallbackPackages) {
+            if (startIfPossible(pm.getLaunchIntentForPackage(pkg))) return;
+        }
+        Toast.makeText(this, R.string.not_available, Toast.LENGTH_LONG).show();
+    }
+
+    /** Launches {@code i} only if it is non-null and resolves; returns true on success. */
+    private boolean startIfPossible(Intent i) {
+        if (i == null) return false;
+        try {
+            startActivity(i);
+            return true;
+        } catch (ActivityNotFoundException | SecurityException ignored) {
+            return false;
         }
     }
 
