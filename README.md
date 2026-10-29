@@ -8,14 +8,24 @@ tvOS 风格的 Android TV / 盒子桌面（launcher），干净、轻量、纯�
 
 | 安装包 | 体积 | 说明 |
 | --- | --- | --- |
-| [Veil-TV-v2.1.3-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.3/Veil-TV-v2.1.3-full.apk) | 1.2 MB | 含较大兜底背景图；所有壁纸（航拍视频 / 必应 / 360）均在线拉取，安装包内零预置壁纸图 |
-| [Veil-TV-v2.1.3-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.3/Veil-TV-v2.1.3-lite.apk) | 0.59 MB | 兜底图更小；功能与 full 完全一致，壁纸同样全在线 |
+| [Veil-TV-v2.1.4-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.4/Veil-TV-v2.1.4-full.apk) | 1.2 MB | 含较大兜底背景图；所有壁纸（航拍视频 / 必应 / 360）均在线拉取，安装包内零预置壁纸图 |
+| [Veil-TV-v2.1.4-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.4/Veil-TV-v2.1.4-lite.apk) | 0.59 MB | 兜底图更小；功能与 full 完全一致，壁纸同样全在线 |
 
 ```bash
-adb install -r Veil-TV-v2.1.3-lite.apk
+adb install -r Veil-TV-v2.1.4-lite.apk
 ```
 
 两个包包名相同（`com.veil.launcher`），可互相覆盖安装。安装后在系统设置里把 Veil 设为默认桌面。
+
+### v2.1.4：白天 / 夜晚双玻璃模式
+
+让桌面玻璃随昼夜自动切换质感，并顺手清掉了上一版的几处冗余：
+
+- **dock 磨砂带分昼夜**：白天（7:00–18:00）渲染乳白亮纱，磨砂玻璃读作「阳光下的玻璃」；夜晚（18:00–7:00）保持原来的暗色烟熏纱，沉稳。切换由纯时钟判断（7:00–18:00 算白天），不申请定位权限。
+- **跨边界自动翻转**：空闲的桌面若从白天挂到夜晚（或反之），磨砂带会即时重渲染，不会卡在旧模式。
+- **弹窗 / 设置面板两种模式都保持深色玻璃**：面板标题全是白字，浅色面板会直接看不清，所以昼夜差异只落在没有文字压着的磨砂带上——这是实机对比后确定的最安全做法（Aerial 也走同样的权衡：材质变化不牺牲文字可读性）。
+- 清理：删掉上一版方案里未用上的日间 drawable，以及一处被绑定逻辑覆盖的死代码磁贴背景。
+- 版本号 214 → 215，版本名 2.1.4；full / lite 双包构建通过，已在斐讯 T1（Android 7.1.2）实机验证昼夜两种模式。
 
 ### v2.1.3：液态玻璃 UI + 航拍视频「下载再播」+ 界面全中文
 
