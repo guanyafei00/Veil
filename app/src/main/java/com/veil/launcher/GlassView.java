@@ -43,8 +43,12 @@ public class GlassView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        fill.setShader(new LinearGradient(0, 0, 0, h, 0x3DFFFFFF, 0x12FFFFFF, Shader.TileMode.CLAMP));
-        specular.setShader(new LinearGradient(0, 0, 0, h * 0.45f, 0x66FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        // A WHISPER of fill, not a slab: the old 24%->7% white read as a misplaced frosted card
+        // floating around the focused tile on bright wallpapers (the owner's TV photos — the
+        // "icon at the very top" report). The zoom + rim + glow carry the focus now; the fill
+        // only keeps a breath of glass sheen.
+        fill.setShader(new LinearGradient(0, 0, 0, h, 0x14FFFFFF, 0x08FFFFFF, Shader.TileMode.CLAMP));
+        specular.setShader(new LinearGradient(0, 0, 0, h * 0.45f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
     }
 
     @Override

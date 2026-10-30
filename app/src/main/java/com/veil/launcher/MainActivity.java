@@ -959,6 +959,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             va.start();
         }
         fadeUnderGlass();   // the grid may already have been down: settle the glass either way
+        // The grid slid below the fold: the focused tile's name/artwork must go with it, or the
+        // label stayed floating on the wallpaper after the owner browsed the icons (their report).
+        hideHeroName();
+        hideHeroArt();
         focusTopBar();
     }
     /** Main-thread post that stops at a destroyed activity: background work must not touch its views. */
@@ -1640,13 +1644,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         unregisterReceiver(netCheckReceiver);
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(screensaverTick);   // an app or the panel is in front: no idle count
-        // The desktop is not on screen: the breath rests (the screen is off or showing an app).
-        if (breatheAnim != null) breatheAnim.pause();
-        // The desktop video is off screen too: pause it so it isn't decoding behind another app.
-        if (aerialVideo != null) aerialVideo.pause();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
+        // NOTE: the aerial video is NOT paused here on purpose. The settings panel is translucent —
+        // the desktop stays fully visible behind it, and pausing here tore the video layer down
+        // (pause() releases the player and parks the surface), exposing the still wallpaper: the
+        // owner saw the background swap to a pool image the moment 设置 opened. The real
+        // tear-down now lives in onStop, which only fires for opaque screens (a launched app,
+        // screen off) — never for our own translucent panel.
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // The desktop is genuinely off screen (another app covers us, or the screen is off):
+        // the breath rests, the video tears down so it isn't decoding behind someone else.
+        if (breatheAnim != null) breatheAnim.pause();
+        if (aerialVideo != null) aerialVideo.pause();
     }
 
     @Override
