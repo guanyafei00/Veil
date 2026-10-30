@@ -23,6 +23,9 @@
                     <gradient android:angle="270"
                         android:startColor="#22FFFFFF"
                         android:endColor="#00FFFFFF" />
+                    <!-- The sheen MUST carry the pill's corners: without them the square
+                         layer peeked past the rounded arc at the top (the owner's photos). -->
+                    <corners android:radius="22dp" />
                 </shape>
             </item>
         </layer-list>

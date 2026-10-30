@@ -208,7 +208,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
                 sh.setLocalMatrix(m);
                 bandBitmap.setShader(sh);
                 c.drawRoundRect(rect, radius, radius, bandBitmap);
-                c.drawRoundRect(rect, radius, radius, grain);
+                // No grain here: the frost already feather-fades at its edges (FrostGlass),
+                // and a full-rect grain overlay would paint hard noise right over the fade.
                 return;
             }
             // frost failed (huge wallpaper, OOM): fall through to the painted gradient

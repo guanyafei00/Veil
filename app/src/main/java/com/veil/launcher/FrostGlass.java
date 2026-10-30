@@ -89,7 +89,7 @@ final class FrostGlass {
         return cropped;
     }
 
-    /** Two box-blur passes + the readability darkening; consumes {@code cropped}. */
+    /** Two box-blur passes + the mood veil + feathered edges; consumes {@code cropped}. */
     private static Bitmap finishGlass(Bitmap cropped, int radius1, int radius2) {
         int halfW = cropped.getWidth(), halfH = cropped.getHeight();
         int[] px = new int[halfW * halfH];
@@ -98,19 +98,41 @@ final class FrostGlass {
         px = boxBlur(px, halfW, halfH, radius2);
         cropped.setPixels(px, 0, halfW, 0, 0, halfW, halfH);
 
+        // ARGB_8888, not RGB_565: the feathered edges below need a real alpha channel.
+        Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.ARGB_8888);
+        Canvas oc = new Canvas(out);
+        Paint content = new Paint(Paint.ANTI_ALIAS_FLAG);
+        if (!GlassTheme.isNight()) {
+            // Day milk over warm wallpapers (desert dunes…) reads muddy yellow: pull the
+            // saturation down a notch so the band stays "frosted", not "stained".
+            android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
+            cm.setSaturation(0.78f);
+            content.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
+        }
+        oc.drawBitmap(cropped, 0, 0, content);
+        cropped.recycle();
+
         // Mood veil: at night a dark scrim keeps white text readable; in daylight the band
         // turns milky bright instead — sunlit frosted glass rather than a smoked slab. A
         // whisper of dark rides along in the day veil so focused labels never wash out.
-        Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
-        Canvas oc = new Canvas(out);
-        oc.drawBitmap(cropped, 0, 0, null);
         if (GlassTheme.isNight()) {
             oc.drawColor(0x3A000000);
         } else {
             oc.drawColor(0x2EFFFFFF);
             oc.drawColor(0x14000000);
         }
-        cropped.recycle();
+
+        // Feather the top and bottom edges: the band used to end in a HARD horizontal cut
+        // across the wallpaper (the owner's photos). An alpha ramp fades it into the
+        // wallpaper instead — glass melting into the scene, not a sticker on it.
+        float fade = Math.max(3f, halfH * 0.16f);
+        Paint mask = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mask.setXfermode(new android.graphics.PorterDuffXfermode(
+                android.graphics.PorterDuff.Mode.DST_IN));
+        mask.setShader(new android.graphics.LinearGradient(0, 0, 0, halfH, new int[]{
+                0x00000000, 0xFF000000, 0xFF000000, 0x00000000}, new float[]{
+                0f, fade / halfH, 1f - fade / halfH, 1f}, android.graphics.Shader.TileMode.CLAMP));
+        oc.drawRect(0, 0, halfW, halfH, mask);
         return out;
     }
 
