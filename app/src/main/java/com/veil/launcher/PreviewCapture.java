@@ -31,7 +31,7 @@ import java.util.Arrays;
  */
 final class PreviewCapture {
 
-    private static final String TAG = "TvHome.Preview";
+    private static final String TAG = "Veil.Preview";
     private static final int MAX_PREVIEWS = 30;
     /** Frames younger than this are kept only as a fallback: they may be the hand-off frame. */
     private static final long FRAME_GATE_MS = 400;

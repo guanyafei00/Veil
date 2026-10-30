@@ -21,14 +21,14 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * The aerial screensaver (inspired by Apple's aerial screensaver): full-screen Apple TV aerials streamed straight from
+ * A full-screen streaming video screensaver: Apple TV videos streamed straight from
  * Apple's servers — nothing in the APK but a 16 KB playlist. A thin corner clock and the place
  * caption sit over the video; left/right keys jump to the previous/next clip. When the network
  * or the codec fails it quietly falls back to the drifting clock look, so the screen is never
  * dead. Videos play at the server's 2K H.264 bitrate; the saver is opt-in in the system's
  * screensaver picker, so nobody pays the traffic by accident.
  */
-public class AerialDream extends DreamService implements SurfaceHolder.Callback {
+public class VideoDream extends DreamService implements SurfaceHolder.Callback {
 
     /** Give a clip this long to become playable before falling back to the clock. */
     private static final long PREPARE_TIMEOUT_MS = 12_000L;
@@ -69,11 +69,11 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
         setInteractive(true);
         setFullscreen(true);
         setScreenBright(false);
-        setContentView(R.layout.dream_aerial);
-        surface = findViewById(R.id.aerialSurface);
-        overlay = findViewById(R.id.aerialOverlay);
-        fallback = findViewById(R.id.aerialFallback);
-        caption = findViewById(R.id.aerialCaption);
+        setContentView(R.layout.dream_video);
+        surface = findViewById(R.id.videoSurface);
+        overlay = findViewById(R.id.videoOverlay);
+        fallback = findViewById(R.id.videoFallback);
+        caption = findViewById(R.id.videoCaption);
         holder = surface.getHolder();
         holder.addCallback(this);
         loadPlaylist();
@@ -83,10 +83,10 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
     @Override
     public void onDreamingStarted() {
         super.onDreamingStarted();
-        // surfaceCreated may already have fired, or may still be coming; playRandom() guards both.
+        // surfaceCreated may already have fired, or may still be coming; playFromDesktop() guards both.
         if (!clips.isEmpty() && surfaceReady && !stopped && player == null
                 && fallback.getVisibility() != View.VISIBLE) {
-            playRandom();
+            playFromDesktop();
         }
     }
 
@@ -119,7 +119,7 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
 
     /** Reads the bundled 16 KB playlist; a broken one just means the clock fallback. */
     private void loadPlaylist() {
-        try (InputStream in = getAssets().open("aerials.json")) {
+        try (InputStream in = getAssets().open("videos.json")) {
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
@@ -133,14 +133,14 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
             }
         } catch (Exception e) {
             // A missing or broken clips.json: the screensaver stays dark instead of crashing.
-            android.util.Log.w("TvHome", "aerial clips unreadable: " + e);
+            android.util.Log.w("Veil", "video clips unreadable: " + e);
         }
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder h) {
         surfaceReady = true;
-        if (!clips.isEmpty() && !stopped) playRandom();
+        if (!clips.isEmpty() && !stopped) playFromDesktop();
     }
 
     @Override
@@ -152,8 +152,29 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
         surfaceReady = false;
     }
 
+    /** Plays a fresh random clip (never the same one twice in a row). */
     private void playRandom() {
         playAnother(0);
+    }
+
+    /**
+     * Continues whatever the desktop video background is currently showing when we can; otherwise
+     * falls back to a random clip. Keeps the screensaver visually continuous with the desktop.
+     */
+    private void playFromDesktop() {
+        if (player != null) return;   // already running
+        if (clips.isEmpty() || stopped) return;
+        String url = WallpaperState.currentUrl();
+        if (url != null && WallpaperState.ageMs() >= 0 && WallpaperState.ageMs() < 60_000L) {
+            for (Clip c : clips) {
+                if (url.equals(c.url)) {
+                    android.util.Log.i("Veil", "screensaver reuses desktop clip: " + c.name);
+                    playClip(c, WallpaperState.currentPositionMs());
+                    return;
+                }
+            }
+        }
+        playRandom();
     }
 
     /** Plays the clip `step` away from the current one (wraps around); 0 = a fresh random pick. */
@@ -167,10 +188,15 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
             pick = ((lastPick < 0 ? 0 : lastPick) + step + clips.size()) % clips.size();
         }
         lastPick = pick;
-        final Clip clip = clips.get(pick);
+        playClip(clips.get(pick), 0L);
+    }
+
+    /** Streams {@code clip} from its URL, optionally resuming near {@code seekMs}; clock on failure. */
+    private void playClip(Clip clip, long seekMs) {
+        if (clip == null || stopped || !surfaceReady) return;
+        lastPick = clips.indexOf(clip);
         caption.setText(clip.name);
         releasePlayer();
-        if (!surfaceReady) return;
         try {
             player = new MediaPlayer();
             player.setDataSource(clip.url);
@@ -180,6 +206,13 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
                 fallback.setVisibility(View.GONE);
                 surface.setVisibility(View.VISIBLE);
                 p.setLooping(false);
+                if (seekMs > 0) {
+                    try {
+                        p.seekTo((int) seekMs);
+                    } catch (Exception ignore) {
+                        // Resuming a live stream is best-effort; starting from 0 is fine.
+                    }
+                }
                 p.start();
             });
             player.setOnCompletionListener(p -> playAnother(1));   // roll into the next landscape
@@ -197,7 +230,7 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
     /** No network / bad codec / too slow: show the drifting clock instead of a dead screen. */
     private void failToClock(String why) {
         if (stopped) return;
-        android.util.Log.w("TvHome.Aerial", "fallback: " + why);
+        android.util.Log.w("Veil", "fallback: " + why);
         handler.removeCallbacks(prepareTimeout);
         releasePlayer();
         surface.setVisibility(View.GONE);
@@ -239,12 +272,12 @@ public class AerialDream extends DreamService implements SurfaceHolder.Callback 
             try {
                 player.stop();
             } catch (Exception e) {
-                android.util.Log.d("TvHome", "aerial player stop skipped: " + e);
+                android.util.Log.d("Veil", "video player stop skipped: " + e);
             }
             try {
                 player.release();
             } catch (Exception e) {
-                android.util.Log.d("TvHome", "aerial player release skipped: " + e);
+                android.util.Log.d("Veil", "video player release skipped: " + e);
             }
             player = null;
         }

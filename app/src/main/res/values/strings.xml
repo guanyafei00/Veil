@@ -20,7 +20,7 @@
     <string name="cant_open">Can\'t open %1$s</string>
     <string name="date_format">EEEE  d MMMM</string>
     <string name="dream_name">Clock</string>
-    <string name="dream_aerial">Aerials</string>
+    <string name="dream_video">Videos</string>
     <string name="vpn">VPN</string>
     <string name="vpn_off">VPN off</string>
     <string name="home_settings">Default home</string>
@@ -48,7 +48,7 @@
     <string name="card_state_new_key">New key</string>
     <string name="card_state_new_label">New name</string>
 
-    <!-- All apps button, long-press menu, settings panel (adapted from AT4K). -->
+    <!-- All apps button, long-press menu, settings panel (adapted from reference launcher). -->
     <string name="all_apps">All apps</string>
     <string name="no_apps">No apps to show</string>
     <string name="long_press_pin">Pin to dock</string>
@@ -81,7 +81,7 @@
     <string name="nothing_hidden">No hidden apps</string>
     <string name="hidden_apps_title">Hidden apps (tap to show again)</string>
 
-    <!-- Folders with a password lock (ported from AT4K's folders). -->
+    <!-- Folders with a password lock (ported from reference launcher's folders). -->
     <string name="add_to_folder">Add to folder</string>
     <string name="choose_folder">Choose folder</string>
     <string name="new_folder">New folder</string>
@@ -164,7 +164,7 @@
     <string name="weather_need_city">Pick a city first</string>
     <string name="weather_net_fail">Weather service unreachable</string>
 
-    <!-- Quick extras + icon management (AT4K borrows, v2.6) -->
+    <!-- Quick extras + icon management (borrows, v2.6) -->
     <string name="weather_unit">Temperature unit</string>
     <string name="weather_unit_done">Temperature unit saved</string>
     <string name="icon_change">Change icon</string>
@@ -207,9 +207,9 @@
     <string name="hero_art_off">Focus artwork off</string>
     <string name="wallpaper_bing_off">Bing daily wallpaper off</string>
     <string name="panel_control">Control centre (beta)</string>
-    <string name="wallpaper_aerial">Apple aerial wallpaper rotation</string>
-    <string name="aerial_on">Aerial rotation on: the next still shows on the chosen cadence</string>
-    <string name="aerial_off">Aerial rotation off</string>
+    <string name="wallpaper_video">Apple video wallpaper rotation</string>
+    <string name="video_on">Video rotation on: the next still shows on the chosen cadence</string>
+    <string name="video_off">Video rotation off</string>
     <string name="interval_5m">Every 5 minutes</string>
     <string name="interval_15m">Every 15 minutes</string>
     <string name="interval_30m">Every 30 minutes</string>
@@ -217,25 +217,25 @@
     <string name="interval_3h">Every 3 hours</string>
     <string name="interval_12h">Every 12 hours</string>
     <string name="interval_1d">Once a day</string>
-    <string name="aerial_expand">Expand aerial library</string>
-    <string name="aerial_res">Aerial still resolution</string>
-    <string name="aerial_res_auto">Follow the display</string>
-    <string name="aerial_res_done">Aerial still resolution saved</string>
-    <string name="aerial_expand_msg">Releases fresh stills from the bundled aerial library first (offline, instant); once that pool runs out, new frames are pulled from Apple\'s stream when the network allows.</string>
-    <string name="aerial_expand_go">Expand</string>
-    <string name="aerial_expanding">Expanding…</string>
-    <string name="aerial_expand_done">Added %1$d, library now %2$d</string>
-    <string name="aerial_expand_failed">Expand failed (%1$s), try again later</string>
-    <string name="aerial_expand_none">No usable frames in that clip, tap again for another</string>
-    <string name="aerial_expand_used_up">Every clip in the playlist has been expanded</string>
-    <string name="aerial_err_net">Network unreachable — check the box\'s connection</string>
-    <string name="aerial_err_timeout">Download timed out — the network is too slow, try later</string>
-    <string name="aerial_err_decode">Downloaded, but no frames decoded — tap again for another</string>
+    <string name="video_expand">Expand video library</string>
+    <string name="video_res">Video still resolution</string>
+    <string name="video_res_auto">Follow the display</string>
+    <string name="video_res_done">Video still resolution saved</string>
+    <string name="video_expand_msg">Releases fresh stills from the bundled video library first (offline, instant); once that pool runs out, new frames are pulled from Apple\'s stream when the network allows.</string>
+    <string name="video_expand_go">Expand</string>
+    <string name="video_expanding">Expanding…</string>
+    <string name="video_expand_done">Added %1$d, library now %2$d</string>
+    <string name="video_expand_failed">Expand failed (%1$s), try again later</string>
+    <string name="video_expand_none">No usable frames in that clip, tap again for another</string>
+    <string name="video_expand_used_up">Every clip in the playlist has been expanded</string>
+    <string name="video_err_net">Network unreachable — check the box\'s connection</string>
+    <string name="video_err_timeout">Download timed out — the network is too slow, try later</string>
+    <string name="video_err_decode">Downloaded, but no frames decoded — tap again for another</string>
     <string name="bing_rotate">Bing wallpaper rotation</string>
     <string name="bing_rotate_on">Bing rotation on: the cached Bing pictures rotate on the chosen cadence</string>
     <string name="w360_gallery">360 gallery category</string>
-    <string name="aerial_source">Aerial picture source</string>
-    <string name="sec_aerial">AERIAL WALLPAPERS</string>
+    <string name="video_source">Video picture source</string>
+    <string name="sec_video">VIDEO WALLPAPERS</string>
     <string name="sec_bing">BING WALLPAPERS</string>
     <string name="sec_w360">360 GALLERY</string>
     <string name="sec_diag">DIAGNOSTICS</string>
@@ -265,7 +265,7 @@
     <string name="section_system">Settings</string>
     <string name="section_veil">Veil</string>
     <string name="panel_screensaver">Screensaver</string>
-    <string name="screensaver_on">Screensaver on: the aerial stills and the Bing picture take over when the desktop is idle</string>
+    <string name="screensaver_on">Screensaver on: the video stills and the Bing picture take over when the desktop is idle</string>
     <string name="screensaver_off">Screensaver off</string>
     <string name="screensaver_delay">Start after</string>
     <string name="screensaver_delay_fmt">%d min</string>

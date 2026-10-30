@@ -22,14 +22,14 @@ import javax.net.ssl.X509TrustManager;
  * One HTTP client for the whole app.
  * <p>
  * The box runs Android 7.1.2, whose bundled CA store predates the roots today's CDNs chain to
- * ("Trust anchor for certification path not found" — Apple's aerial CDN and the 360 image CDN
+ * ("Trust anchor for certification path not found" — Apple's video CDN and the 360 image CDN
  * both died in the TLS handshake, while bing.com kept working because its root is old enough to
  * be in that store). So: try the SYSTEM trust store first, and only when the handshake fails,
  * retry once without certificate validation. Plain HTTP is unaffected; a normal, valid
  * certificate still gets the strict treatment.
  */
 final class Http {
-    private static final String TAG = "TvHome.Http";
+    private static final String TAG = "Veil.Http";
     /** The browser-ish UA the picture CDNs answer to. */
     static final String UA = "Mozilla/5.0 (Linux; Android 7.1.2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36";
 
@@ -58,7 +58,7 @@ final class Http {
     /**
      * Streams {@code url} straight to {@code out} on disk instead of buffering it in memory.
      * <p>
-     * The aerial clips are 48-80 MB heads of HEVC video: reading one into a byte[] on a box with
+     * The video clips are 48-80 MB heads of HEVC video: reading one into a byte[] on a box with
      * a few hundred MB of RAM died with an OutOfMemoryError — which is an Error, so it slipped
      * past every {@code catch (Exception)} and the expansion silently reported "0 added". Writing
      * the stream to the file as it arrives keeps the footprint at one 16 KB buffer.

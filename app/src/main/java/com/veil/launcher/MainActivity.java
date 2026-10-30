@@ -137,20 +137,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private android.widget.ImageView wallpaperView;
     /** The incoming picture during a cross-fade; settles into wallpaperView when the fade ends. */
     private android.widget.ImageView wallFadeView;
-    /** The live Apple aerial video surface behind the UI; the desktop "航拍视频真播" background. */
-    private SurfaceView aerialVideoView;
-    /** Streams the aerial clips; toggles wallpaperView so the video shows through when playing. */
-    private AerialWallpaperPlayer aerialVideo;
+    /** The live Apple video video surface behind the UI; the desktop "航拍视频真播" background. */
+    private SurfaceView bgVideoView;
+    /** Streams the video clips; toggles wallpaperView so the video shows through when playing. */
+    private WallpaperVideoPlayer bgVideo;
     private boolean wallTransitioning;
     /** The Ken Burns breath running on wallpaperView; paused while the desktop is away. */
     private android.animation.ValueAnimator breatheAnim;
     private final java.util.Random rnd = new java.util.Random();
     private long wallpaperStamp = -1;
-    /** The aerial-rotation switch state as of the last resume: catching it newly ON rotates now. */
-    private boolean aerialWasOn;
+    /** The video-rotation switch state as of the last resume: catching it newly ON rotates now. */
+    private boolean videoWasOn;
     /** The Bing-rotation switch state as of the last resume: catching it newly ON rotates now. */
     private boolean bingWasOn;
-    /** Weather clock (inspired by AT4K): the line under the date, fed by Open-Meteo. */
+    /** Weather clock (inspired by reference launcher): the line under the date, fed by Open-Meteo. */
     private TextView weatherText;
     /** The app whose icon the owner is replacing (icon management); set before the picture picker opens. */
     private String pendingIconPkg;
@@ -196,7 +196,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private String movingPkg;
     /** The tile the remote points at as the drop target while moving (-1 = none). */
     private int moveTargetPos = -1;
-    /** Folders the owner created (AT4K-like), password lock included. */
+    /** Folders the owner created (reference-style), password lock included. */
     private List<Folder> userFolders = new ArrayList<>();
     private List<Cards.Card> cards = Collections.emptyList();
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
@@ -209,12 +209,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     /**
-     * Background IO for the home screen's file work (multi-model review P0): the aerial wallpaper
+     * Background IO for the home screen's file work (multi-model review P0): the video wallpaper
      * copy, the JPEG decode and the tile scan used to run on the main thread and janked the grid
      * on every resume and package change. One thread: the tasks are short and must stay in order.
      */
     private final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "tvhome-io");
+        Thread t = new Thread(r, "veil-io");
         t.setPriority(Thread.MIN_PRIORITY + 1);   // never compete with the UI thread
         return t;
     });
@@ -230,8 +230,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             handler.postDelayed(this, 15_000L);
         }
     };
-    /** Re-checks the aerial rotation cadence while the desktop process stays alive. */
-    private Runnable aerialTicker;
+    /** Re-checks the video rotation cadence while the desktop process stays alive. */
+    private Runnable videoTicker;
     /** Refreshes the network pill when the connection changes: at boot Wi-Fi often connects after Home is shown. */
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
         @Override
@@ -281,14 +281,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /**
      * Network self-test and one-tap expansions over adb:
      * {@code am broadcast -a com.veil.launcher.NETCHECK} runs the wallpaper-source sweep,
-     * {@code am broadcast -a com.veil.launcher.EXPAND_AERIAL} / {@code .EXPAND_W360} pull one
-     * round of pictures. The report lands in logcat (TvHome.NetCheck). The owner can trigger the
+     * {@code am broadcast -a com.veil.launcher.EXPAND_VIDEO} / {@code .EXPAND_W360} pull one
+     * round of pictures. The report lands in logcat (Veil.NetCheck). The owner can trigger the
      * same sweep from the settings panel.
      */
     private final IntentFilter netCheckFilter = new IntentFilter("com.veil.launcher.NETCHECK");
     {
         // The same receiver also carries the one-tap expansion actions.
-        netCheckFilter.addAction("com.veil.launcher.EXPAND_AERIAL");
+        netCheckFilter.addAction("com.veil.launcher.EXPAND_VIDEO");
         netCheckFilter.addAction("com.veil.launcher.EXPAND_W360");
     }
     private final BroadcastReceiver netCheckReceiver = new BroadcastReceiver() {
@@ -296,10 +296,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (action == null) return;
-            if (action.contains("EXPAND_AERIAL")) {
-                AerialExpander.expand(MainActivity.this, (added, total, error, detail) -> {
-                    android.util.Log.d("TvHome.NetCheck",
-                            "aerial expand: added=" + added + " total=" + total
+            if (action.contains("EXPAND_VIDEO")) {
+                GalleryExpander.expand(MainActivity.this, (added, total, error, detail) -> {
+                    android.util.Log.d("Veil.NetCheck",
+                            "video expand: added=" + added + " total=" + total
                                     + " error=" + error + " detail=" + detail);
                     postUi(() -> Toast.makeText(MainActivity.this,
                             "航拍扩充：新增 " + added + " 张，共 " + total + " 张"
@@ -310,7 +310,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             if (action.contains("EXPAND_W360")) {
                 Wall360.expand(MainActivity.this, (added, total, error, detail) -> {
-                    android.util.Log.d("TvHome.NetCheck",
+                    android.util.Log.d("Veil.NetCheck",
                             "w360 expand: added=" + added + " total=" + total
                                     + " error=" + error + " detail=" + detail);
                     postUi(() -> Toast.makeText(MainActivity.this,
@@ -321,9 +321,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 return;
             }
             NetCheck.run(MainActivity.this, report -> {
-                android.util.Log.d("TvHome.NetCheck", "===== adb report =====\n" + report);
+                android.util.Log.d("Veil.NetCheck", "===== adb report =====\n" + report);
                 postUi(() -> Toast.makeText(MainActivity.this,
-                        "网络自检完成，详情见 logcat（TvHome.NetCheck）", Toast.LENGTH_LONG).show());
+                        "网络自检完成，详情见 logcat（Veil.NetCheck）", Toast.LENGTH_LONG).show());
             });
         }
     };
@@ -354,20 +354,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
-        // Desktop aerial video background: a full-screen surface behind the UI. The static still
+        // Desktop video video background: a full-screen surface behind the UI. The static still
         // (wallpaperView) sits on top of it and is hidden only once a frame is actually playing,
-        // so the desktop shows the moving Apple-TV-style aerial instead of a frozen picture — and
+        // so the desktop shows the moving live video instead of a frozen picture — and
         // falls back to the still if the network or codec fails. The surface punches a transparent
         // hole in the window, so it shows through regardless of root's background colour.
-        aerialVideoView = new SurfaceView(this);
-        aerialVideoView.setLayoutParams(new FrameLayout.LayoutParams(
+        bgVideoView = new SurfaceView(this);
+        bgVideoView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        root.addView(aerialVideoView, 0);   // backmost child; the video composites behind the window UI
+        root.addView(bgVideoView, 0);   // backmost child; the video composites behind the window UI
         // Parked while idle: an empty SurfaceView composites as an opaque black layer on some
         // boxes (Phicomm T1), which would black out the whole desktop. The player reveals it
         // only while a clip is actually preparing/playing and parks it again on failure.
-        aerialVideoView.setVisibility(View.GONE);
-        aerialVideo = new AerialWallpaperPlayer(this, aerialVideoView, playing -> {
+        bgVideoView.setVisibility(View.GONE);
+        bgVideo = new WallpaperVideoPlayer(this, bgVideoView, playing -> {
             if (wallpaperView != null) {
                 wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
             }
@@ -402,10 +402,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The rotation rewrites the wallpaper file (multi-model review P0: IO off the main
         // thread); the refresh that must follow it runs once the copy is done.
         io.execute(() -> {
-            if (maybeRotateAerialWallpaper()) postUi(MainActivity.this::refreshWallpaper);
+            if (maybeRotateVideoWallpaper()) postUi(MainActivity.this::refreshWallpaper);
         });
-        startAerialTicker();
-        aerialWasOn = prefs.isAerialRotateOn();
+        startVideoTicker();
+        videoWasOn = prefs.isVideoRotateOn();
         bingWasOn = prefs.isBingRotateOn();
         userDock = prefs.loadDock(cfg.dockApps);
         userHidden = prefs.loadHidden(new HashSet<>(cfg.hiddenApps));
@@ -578,7 +578,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (tim != null) tim.registerCallback(inputCallback, handler);
         } catch (Exception noTvInputService) {
             // boxes without a TV input service; the Inputs pill stays hidden
-            android.util.Log.d("TvHome", "no TV input service: " + noTvInputService);
+            android.util.Log.d("Veil", "no TV input service: " + noTvInputService);
         }
         if (cm != null) {
             cm.registerDefaultNetworkCallback(networkCallback);
@@ -628,7 +628,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
-            android.util.Log.w("TvHome", "wallpaper decode failed for " + file + ": " + e);
+            android.util.Log.w("Veil", "wallpaper decode failed for " + file + ": " + e);
             return null;
         }
     }
@@ -638,10 +638,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (wallpaperView == null) {
             wallpaperView = new android.widget.ImageView(this);
             wallpaperView.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
-            // Layer above the aerial-video surface (index 0): adding at 0 would slot the
+            // Layer above the video-video surface (index 0): adding at 0 would slot the
             // wallpaper UNDER the SurfaceView, and the surface's punched-out region then
             // hides the still — the desktop read as permanently black on the Phicomm T1.
-            int above = aerialVideoView != null ? root.indexOfChild(aerialVideoView) + 1 : 0;
+            int above = bgVideoView != null ? root.indexOfChild(bgVideoView) + 1 : 0;
             root.addView(wallpaperView, above, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             wallpaperView.setImageBitmap(bmp);
             // The dock band frost crops straight from this bitmap (inspired by Tigris).
@@ -982,7 +982,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         prefs.clearDockColor();
         prefs.saveColumns(5);   // the owner asked for five dock icons
         prefs.setMigratedV29();
-        android.util.Log.d("TvHome", "v2.9 migration: dock reset, 5 columns, colour default");
+        android.util.Log.d("Veil", "v2.9 migration: dock reset, 5 columns, colour default");
     }
 
     /** One-shot v3.0 migration: hero art (app content big pictures behind the desktop) is
@@ -992,38 +992,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (prefs.isMigratedV30()) return;
         prefs.setHeroArtOn(false);
         prefs.setMigratedV30();
-        android.util.Log.d("TvHome", "v3.0 migration: hero art off (wallpaper only)");
+        android.util.Log.d("Veil", "v3.0 migration: hero art off (wallpaper only)");
     }
 
     /**
-     * Apple aerial wallpaper rotation (Apple TV's own screensaver stills, cached in files/aerials/):
+     * Apple video wallpaper rotation (Apple TV's own screensaver stills, cached in files/videos/):
      * the next still shows on the owner's chosen cadence — every 5/15/30/… minutes up to a day
      * (default). Returns true when the wallpaper file was actually rewritten. Rotation is silent
      * if the folder is empty, so the manual wallpaper keeps working.
      */
-    private boolean maybeRotateAerialWallpaper() {
+    private boolean maybeRotateVideoWallpaper() {
         // In "航拍视频" wallpaper mode the live video is the background; don't swap stills underneath it.
-        if ("video".equals(prefs.loadAerialSource())) return false;
-        if (!prefs.isAerialRotateOn()) return false;
+        if ("video".equals(prefs.loadVideoSource())) return false;
+        if (!prefs.isVideoRotateOn()) return false;
         long now = System.currentTimeMillis();
-        long interval = prefs.loadAerialIntervalMin() * 60_000L;
+        long interval = prefs.loadVideoIntervalMin() * 60_000L;
         if (interval < 5 * 60_000L) interval = 5 * 60_000L;   // the stated floor
-        if (now - prefs.loadAerialLastAt() < interval) return false;
-        if (!rotateAerialOnce()) return false;   // a failed copy retries on the next tick
-        prefs.saveAerialLastAt(now);
+        if (now - prefs.loadVideoLastAt() < interval) return false;
+        if (!rotateVideoOnce()) return false;   // a failed copy retries on the next tick
+        prefs.saveVideoLastAt(now);
         return true;
     }
 
     /** Copies the next cached still over the wallpaper slot. True when the file changed. */
-    private boolean rotateAerialOnce() {
+    private boolean rotateVideoOnce() {
         try {
             File base = Config.dir(this);
             if (base == null) return false;
-            File dir = new File(base, "aerials");
+            File dir = new File(base, "videos");
             File[] stills = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".jpg"));
             if (stills == null || stills.length == 0) return false;
             java.util.Arrays.sort(stills);
-            File next = stills[(prefs.loadAerialIndex() & 0x7fffffff) % stills.length];
+            File next = stills[(prefs.loadVideoIndex() & 0x7fffffff) % stills.length];
             File out = new File(base, Config.WALLPAPER_NAME);
             try (java.io.FileInputStream in = new java.io.FileInputStream(next);
                  java.io.FileOutputStream fo = new java.io.FileOutputStream(out)) {
@@ -1031,11 +1031,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 int n;
                 while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
             }
-            prefs.saveAerialIndex(prefs.loadAerialIndex() + 1);
-            android.util.Log.d("TvHome", "aerial wallpaper -> " + next.getName());
+            prefs.saveVideoIndex(prefs.loadVideoIndex() + 1);
+            android.util.Log.d("Veil", "video wallpaper -> " + next.getName());
             return true;
         } catch (Exception e) {
-            android.util.Log.d("TvHome", "aerial rotate failed: " + e.getMessage());
+            android.util.Log.d("Veil", "video rotate failed: " + e.getMessage());
             return false;
         }
     }
@@ -1067,24 +1067,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             wallpaperStamp = stamp;
             showWallpaper(wall);
         }
-        updateAerialVideo();   // the wallpaper (and its source) may have changed: re-evaluate the video
+        updateWallpaperVideo();   // the wallpaper (and its source) may have changed: re-evaluate the video
     }
 
     /**
-     * Starts or stops the desktop aerial video. This is driven by the WALLPAPER source: when the
+     * Starts or stops the desktop video video. This is driven by the WALLPAPER source: when the
      * owner picks "航拍视频" as the wallpaper source (HomeSettings → 壁纸 → 航拍图源 → 航拍视频), the
-     * moving Apple aerial plays on the desktop. The 信源 (HDMI) menu is untouched — it lists only
+     * moving Apple video plays on the desktop. The 信源 (HDMI) menu is untouched — it lists only
      * real video inputs. When the source is anything else, the static still stays. No-op if the
      * player is already in the right state.
      */
-    private void updateAerialVideo() {
-        if (aerialVideo == null) return;
-        String src = prefs.loadAerialSource();
-        android.util.Log.i("TvHome", "aerial gate: source=" + src + " active=" + aerialVideo.isActive());
+    private void updateWallpaperVideo() {
+        if (bgVideo == null) return;
+        String src = prefs.loadVideoSource();
+        android.util.Log.i("Veil", "video gate: source=" + src + " active=" + bgVideo.isActive());
         if ("video".equals(src)) {
-            if (!aerialVideo.isActive()) aerialVideo.start();
+            if (!bgVideo.isActive()) bgVideo.start();
         } else {
-            aerialVideo.stop();
+            bgVideo.stop();
         }
     }
 
@@ -1125,7 +1125,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     /**
-     * First run with no wallpaper of any kind: adopt the bundled aerial-style still (a lone
+     * First run with no wallpaper of any kind: adopt the bundled video-style still (a lone
      * island in a calm sea) instead of the plain black background. Runs once — as soon as the
      * wallpaper file exists, or any rotation source takes over, this never copies again.
      */
@@ -1142,10 +1142,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     int n;
                     while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
                 }
-                android.util.Log.d("TvHome", "bundled wallpaper adopted");
+                android.util.Log.d("Veil", "bundled wallpaper adopted");
                 postUi(MainActivity.this::refreshWallpaper);
             } catch (Exception e) {
-                android.util.Log.d("TvHome", "bundled wallpaper copy skipped: " + e);
+                android.util.Log.d("Veil", "bundled wallpaper copy skipped: " + e);
             }
         });
     }
@@ -1155,13 +1155,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Stock size the multi-market backfill aims for; one pass adds at most up to this. */
     private static final int BING_STOCK_TARGET = 48;
     // The market list itself moved to BingStock.MARKETS — it is needed by more than one caller
-    // (the daily backfill and the aerial/360 fallbacks).
+    // (the daily backfill and the video/360 fallbacks).
 
     /**
      * On resume, once a day: pull Bing's picture of the day into files/bing/ as stock (the
      * owner's call: many cached pictures, not just today's). When rotation is off the newest
      * stock picture is also copied over the wallpaper slot, which is the old one-picture
-     * behaviour; when the aerial rotation owns the slot the stock just quietly grows.
+     * behaviour; when the video rotation owns the slot the stock just quietly grows.
      */
     private void maybeUpdateBingWallpaper() {
         if (!prefs.isBingWallpaperOn()) return;
@@ -1187,14 +1187,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     fo.write(jpg);
                 }
                 prefs.saveBingDate(today);
-                // The slot only moves when Bing owns it: the aerial rotation wins otherwise.
-                if (!prefs.isAerialRotateOn()) {
+                // The slot only moves when Bing owns it: the video rotation wins otherwise.
+                if (!prefs.isVideoRotateOn()) {
                     copyFile(out, new File(dir, Config.WALLPAPER_NAME));
                     postUi(MainActivity.this::refreshWallpaper);
                 }
             } catch (Throwable e) {
                 // Quiet by design: keep yesterday's picture, retry on the next resume — but leave a trace.
-                android.util.Log.d("TvHome", "bing wallpaper update failed: " + e);
+                android.util.Log.d("Veil", "bing wallpaper update failed: " + e);
             }
         });
     }
@@ -1228,12 +1228,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 if (saved <= 0) return;
                 prefs.saveBingStockDate(today);
                 final int total = count + saved;
-                android.util.Log.d("TvHome", "bing stock backfilled: " + saved + " -> " + total);
+                android.util.Log.d("Veil", "bing stock backfilled: " + saved + " -> " + total);
                 postUi(() -> Toast.makeText(this,
                         getString(R.string.bing_stock_done, total), Toast.LENGTH_SHORT).show());
                 postUi(MainActivity.this::refreshWallpaper);
             } catch (Throwable e) {
-                android.util.Log.d("TvHome", "bing stock backfill failed: " + e);
+                android.util.Log.d("Veil", "bing stock backfill failed: " + e);
             }
         });
     }
@@ -1241,7 +1241,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Bing stock rotation: the next cached picture into the wallpaper slot on the chosen cadence. */
     private boolean maybeRotateBingWallpaper() {
         if (!prefs.isBingWallpaperOn() || !prefs.isBingRotateOn()) return false;
-        if (prefs.isAerialRotateOn() || prefs.isW360RotateOn()) return false;   // another rotation owns the slot
+        if (prefs.isVideoRotateOn() || prefs.isW360RotateOn()) return false;   // another rotation owns the slot
         long now = System.currentTimeMillis();
         long interval = prefs.loadBingIntervalMin() * 60_000L;
         if (interval < 5 * 60_000L) interval = 5 * 60_000L;   // the stated floor
@@ -1263,10 +1263,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             File out = new File(base, Config.WALLPAPER_NAME);
             copyFile(next, out);
             prefs.saveBingIndex(prefs.loadBingIndex() + 1);
-            android.util.Log.d("TvHome", "bing wallpaper -> " + next.getName());
+            android.util.Log.d("Veil", "bing wallpaper -> " + next.getName());
             return true;
         } catch (Exception e) {
-            android.util.Log.d("TvHome", "bing rotate failed: " + e.getMessage());
+            android.util.Log.d("Veil", "bing rotate failed: " + e.getMessage());
             return false;
         }
     }
@@ -1274,7 +1274,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** 360 gallery rotation: the next cached picture into the wallpaper slot on the chosen cadence. */
     private boolean maybeRotateW360Wallpaper() {
         if (!prefs.isW360RotateOn()) return false;
-        if (prefs.isAerialRotateOn() || prefs.isBingRotateOn()) return false;   // another rotation owns the slot
+        if (prefs.isVideoRotateOn() || prefs.isBingRotateOn()) return false;   // another rotation owns the slot
         long now = System.currentTimeMillis();
         long interval = prefs.loadW360IntervalMin() * 60_000L;
         if (interval < 5 * 60_000L) interval = 5 * 60_000L;   // the stated floor
@@ -1296,15 +1296,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             File out = new File(base, Config.WALLPAPER_NAME);
             copyFile(next, out);
             prefs.saveW360Index(prefs.loadW360Index() + 1);
-            android.util.Log.d("TvHome", "w360 wallpaper -> " + next.getName());
+            android.util.Log.d("Veil", "w360 wallpaper -> " + next.getName());
             return true;
         } catch (Exception e) {
-            android.util.Log.d("TvHome", "w360 rotate failed: " + e.getMessage());
+            android.util.Log.d("Veil", "w360 rotate failed: " + e.getMessage());
             return false;
         }
     }
 
-    /** Plain byte-copy used by the wallpaper rotation paths (aerial and Bing stock). */
+    /** Plain byte-copy used by the wallpaper rotation paths (video and Bing stock). */
     private static void copyFile(File src, File dst) throws java.io.IOException {
         try (java.io.FileInputStream in = new java.io.FileInputStream(src);
              java.io.FileOutputStream fo = new java.io.FileOutputStream(dst)) {
@@ -1334,12 +1334,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return Http.getBytes(url, 10_000, 15_000, null, 20 * 1024 * 1024);
         } catch (Exception e) {
             // Expected when the box is offline; debug level so a real problem is still traceable.
-            android.util.Log.d("TvHome", "GET bytes failed for " + url + ": " + e);
+            android.util.Log.d("Veil", "GET bytes failed for " + url + ": " + e);
             return null;
         }
     }
 
-    /** Status bar colours (inspired by AT4K): a background tint and text colour over the defaults. */
+    /** Status bar colours (inspired by reference launcher): a background tint and text colour over the defaults. */
     private void applyAppearance() {
         // The dock frost switch may have been flipped in the panel: re-apply it on the way back.
         if (dockDecoration != null) dockDecoration.setFrostEnabled(prefs.isDockFrostOn());
@@ -1369,7 +1369,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ((TextView) findViewById(R.id.btnSettings)).setTextColor(pillText);
     }
 
-    /** The owner's 24-hour clock pick (inspired by AT4K): overrides the 12-hour system format. */
+    /** The owner's 24-hour clock pick (inspired by reference launcher): overrides the 12-hour system format. */
     private void applyTimeFormat() {
         android.widget.TextClock clockView = findViewById(R.id.clock);
         android.widget.TextClock ampmView = findViewById(R.id.ampm);
@@ -1430,7 +1430,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             org.json.JSONArray hi = o.getJSONObject("daily").getJSONArray("temperature_2m_max");
             org.json.JSONArray lo = o.getJSONObject("daily").getJSONArray("temperature_2m_min");
             double hi0 = hi.getDouble(0), lo0 = lo.getDouble(0);
-            if (f) {   // the owner's ℃/℉ pick (inspired by AT4K)
+            if (f) {   // the owner's ℃/℉ pick (inspired by reference launcher)
                 t = t * 9 / 5 + 32;
                 hi0 = hi0 * 9 / 5 + 32;
                 lo0 = lo0 * 9 / 5 + 32;
@@ -1441,7 +1441,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             weatherText.setText(line);
             weatherText.setVisibility(View.VISIBLE);
         } catch (Exception badJson) {
-            android.util.Log.w("TvHome", "weather payload unusable: " + badJson);
+            android.util.Log.w("Veil", "weather payload unusable: " + badJson);
             weatherText.setVisibility(View.GONE);
         }
     }
@@ -1464,7 +1464,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         String body = Http.getStringOrNull(url, 8000, 8000);
         if (body == null) {
             // Expected when the box is offline; debug level so a real problem is still traceable.
-            android.util.Log.d("TvHome", "GET failed for " + url);
+            android.util.Log.d("Veil", "GET failed for " + url);
         }
         return body;
     }
@@ -1484,16 +1484,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         applyColumnsPref();
         applyAppearance();
         applyTimeFormat();
-        // The aerial toggle was just switched on in the settings panel: rotate right now instead of
+        // The video toggle was just switched on in the settings panel: rotate right now instead of
         // waiting for the next cold start, so the change is visible the moment the owner is back.
         // The copy is IO (multi-model review P0); refreshWallpaper() then runs on the main thread.
-        boolean aerialOn = prefs.isAerialRotateOn();
-        if (aerialOn && !aerialWasOn) {
+        boolean videoOn = prefs.isVideoRotateOn();
+        if (videoOn && !videoWasOn) {
             io.execute(() -> {
-                if (maybeRotateAerialWallpaper()) postUi(MainActivity.this::refreshWallpaper);
+                if (maybeRotateVideoWallpaper()) postUi(MainActivity.this::refreshWallpaper);
             });
         }
-        aerialWasOn = aerialOn;
+        videoWasOn = videoOn;
         // The Bing rotation switched on in the panel: backfill a thin stock, rotate right away.
         // Also backfills while the switch is already on: the multi-market pass repeats at most
         // once a day and tops the stock up to target, so the visible count keeps growing.
@@ -1512,9 +1512,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
         }
         refreshWallpaper();
-        // The aerial video follows the wallpaper source: (re)start it when the owner returns with
-        // the Apple aerial rotation on, pause it otherwise.
-        updateAerialVideo();
+        // The video video follows the wallpaper source: (re)start it when the owner returns with
+        // the Apple video rotation on, pause it otherwise.
+        updateWallpaperVideo();
         // Back from an app: the content preview for the app we just left is written now.
         PreviewCapture.stopAndSave();
         updateWeather();
@@ -1649,7 +1649,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();
-        // NOTE: the aerial video is NOT paused here on purpose. The settings panel is translucent —
+        // NOTE: the video video is NOT paused here on purpose. The settings panel is translucent —
         // the desktop stays fully visible behind it, and pausing here tore the video layer down
         // (pause() releases the player and parks the surface), exposing the still wallpaper: the
         // owner saw the background swap to a pool image the moment 设置 opened. The real
@@ -1663,7 +1663,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The desktop is genuinely off screen (another app covers us, or the screen is off):
         // the breath rests, the video tears down so it isn't decoding behind someone else.
         if (breatheAnim != null) breatheAnim.pause();
-        if (aerialVideo != null) aerialVideo.pause();
+        if (bgVideo != null) bgVideo.pause();
     }
 
     @Override
@@ -1674,7 +1674,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /**
      * The owner's screensaver: after the chosen idle minutes on the desktop, hand the screen to
-     * ScreensaverActivity (aerial stills + the Bing picture, clock on top, any key ends it).
+     * ScreensaverActivity (video stills + the Bing picture, clock on top, any key ends it).
      * Never while a menu or a popup is open — the owner is busy, not away.
      */
     private void maybeStartScreensaver() {
@@ -1686,7 +1686,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         try {
             startActivity(new Intent(this, ScreensaverActivity.class));
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "screensaver did not start: " + e);
+            android.util.Log.w("Veil", "screensaver did not start: " + e);
         }
     }
 
@@ -1699,8 +1699,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (aerialVideo != null) aerialVideo.release();
-        if (aerialTicker != null) handler.removeCallbacks(aerialTicker);
+        if (bgVideo != null) bgVideo.release();
+        if (videoTicker != null) handler.removeCallbacks(videoTicker);
         handler.removeCallbacks(screensaverTick);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -1708,7 +1708,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (tim != null) tim.unregisterCallback(inputCallback);
         } catch (Exception noTvInputService) {
             // nothing was registered
-            android.util.Log.d("TvHome", "TV input callback was not registered: " + noTvInputService);
+            android.util.Log.d("Veil", "TV input callback was not registered: " + noTvInputService);
         }
         if (cm != null) {
             cm.unregisterNetworkCallback(networkCallback);
@@ -1880,7 +1880,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             o.inPreferredConfig = Bitmap.Config.RGB_565;
             return android.graphics.BitmapFactory.decodeFile(file.getPath(), o);
         } catch (Exception | OutOfMemoryError e) {
-            android.util.Log.w("TvHome", "preview decode failed for " + file + ": " + e);
+            android.util.Log.w("Veil", "preview decode failed for " + file + ": " + e);
             return null;
         }
     }
@@ -1914,22 +1914,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updateShelfFrost(currentWallpaper());   // the glass goes back to blurring the wallpaper
     }
 
-    /** Starts the slow ticker that rotates the aerial wallpaper on the chosen cadence. */
-    private void startAerialTicker() {
-        if (aerialTicker != null) return;
-        aerialTicker = new Runnable() {
+    /** Starts the slow ticker that rotates the video wallpaper on the chosen cadence. */
+    private void startVideoTicker() {
+        if (videoTicker != null) return;
+        videoTicker = new Runnable() {
             @Override
             public void run() {
                 // The copy and the stamp writes are IO (multi-model review P0): off the main thread.
                 io.execute(() -> {
-                    boolean changed = maybeRotateAerialWallpaper()
+                    boolean changed = maybeRotateVideoWallpaper()
                             || maybeRotateBingWallpaper() || maybeRotateW360Wallpaper();
                     if (changed) postUi(MainActivity.this::refreshWallpaper);
                 });
                 handler.postDelayed(this, 30_000L);   // a 5-minute minimum makes 30 s checks plenty
             }
         };
-        handler.postDelayed(aerialTicker, 30_000L);
+        handler.postDelayed(videoTicker, 30_000L);
     }
 
     private void hideHero() {
@@ -2061,7 +2061,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- long-press menu ----------------------------------------------------------------------
 
     /**
-     * The owner's edit menu on a tile (inspired by AT4K's live editing menu): pin to the dock or
+     * The owner's edit menu on a tile (inspired by reference launcher's live editing menu): pin to the dock or
      * unpin, hide or show again, the system app info page, or add the app to a folder. A folder tile
      * gets its own menu (open, rename, lock, password, delete). Edits persist in PrefsStore.
      */
@@ -2101,7 +2101,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             try {
                 startActivity(i);
             } catch (ActivityNotFoundException ignored) {
-                android.util.Log.d("TvHome", "no picture picker on this box: " + ignored);
+                android.util.Log.d("Veil", "no picture picker on this box: " + ignored);
             }
         });
         options.add(getString(R.string.add_to_folder));
@@ -2118,7 +2118,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         options.add(getString(R.string.long_press_delete));
         actions.add(() -> confirmDeleteApp(pkg, label));
 
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(label)
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .create());
@@ -2215,7 +2215,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * (Hiding an app is the reversible thing; this is the real one.)
      */
     private void confirmDeleteApp(String pkg, String label) {
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(getString(R.string.long_press_delete))
                 .setMessage(getString(R.string.delete_confirm_msg, label))
                 .setPositiveButton(R.string.delete_confirm_yes, (d, which) -> deleteApp(pkg))
@@ -2230,12 +2230,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
         } catch (ActivityNotFoundException noUninstaller) {
-            android.util.Log.d("TvHome", "no uninstaller on this box: " + noUninstaller);
+            android.util.Log.d("Veil", "no uninstaller on this box: " + noUninstaller);
             Toast.makeText(this, R.string.delete_no_uninstaller, Toast.LENGTH_LONG).show();
         }
     }
 
-    // ---- icon management (inspired by AT4K): replace an app's icon with a picture, or put it back ----
+    // ---- icon management (inspired by reference launcher): replace an app's icon with a picture, or put it back ----
 
     /** Where a custom icon lives: icon_&lt;package&gt;.png in the app's files dir; exists = replaced. */
     private File customIconFile(String pkg) {
@@ -2270,7 +2270,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 }
             });
         }
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(label + " \u00B7 " + getString(R.string.icon_change))
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .setNegativeButton(android.R.string.cancel, null)
@@ -2311,7 +2311,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         try {
             startActivityForResult(projectionManager.createScreenCaptureIntent(), REQUEST_CAPTURE);
         } catch (Exception ex) {
-            android.util.Log.w("TvHome", "capture consent unavailable: " + ex);
+            android.util.Log.w("Veil", "capture consent unavailable: " + ex);
             pendingLaunchEntry = null;
             adapter.startApp(e);
         }
@@ -2328,7 +2328,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     MediaProjection projection = projectionManager.getMediaProjection(resultCode, data);
                     if (projection != null) PreviewCapture.init(this, projection);
                 } catch (Exception ex) {
-                    android.util.Log.w("TvHome", "capture consent failed: " + ex);
+                    android.util.Log.w("Veil", "capture consent failed: " + ex);
                 }
             } else {
                 // Refused once: stop asking on every launch — the panel can turn it back on.
@@ -2379,11 +2379,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         reloadTiles();
     }
 
-    // ---- folders (inspired by AT4K) ------------------------------------------------------------
+    // ---- folders (inspired by reference launcher) ------------------------------------------------------------
 
     /**
-     * OK on a folder tile (AT4K's folder open): a locked folder first asks for its 4-digit password;
-     * a wrong code keeps it closed with "密码错误", exactly like AT4K.
+     * OK on a folder tile (reference launcher's folder open): a locked folder first asks for its 4-digit password;
+     * a wrong code keeps it closed with "密码错误", exactly as expected.
      */
     @Override
     public void onFolderOpen(Folder folder) {
@@ -2430,7 +2430,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
 
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(folder.name)
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .create());
@@ -2439,7 +2439,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Apps inside a folder: OK launches one, the extra entry takes apps back out. */
     private void showFolderContents(Folder folder) {
         if (folder.apps.isEmpty()) {
-            Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+            Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                     .setTitle(folder.name)
                     .setMessage(R.string.folder_empty)
                     .setPositiveButton(android.R.string.ok, null)
@@ -2452,7 +2452,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         List<CharSequence> items = new ArrayList<>();
         for (String s : labels) items.add(s);
         items.add(getString(R.string.remove_from_folder));
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(folder.name)
                 .setItems(items.toArray(new CharSequence[0]), (d, which) -> {
                     if (which >= pkgs.size()) {
@@ -2469,7 +2469,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         List<String> pkgs = new ArrayList<>(folder.apps);
         String[] labels = new String[pkgs.size()];
         for (int i = 0; i < pkgs.size(); i++) labels[i] = labelFor(pkgs.get(i));
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.remove_from_folder)
                 .setItems(labels, (d, which) -> {
                     folder.apps.remove(pkgs.get(which));
@@ -2478,7 +2478,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 .create());
     }
 
-    /** "Add to folder": the owner's folders plus a new-folder entry at the end (AT4K's picker). */
+    /** "Add to folder": the owner's folders plus a new-folder entry at the end (reference launcher's picker). */
     private void showFolderPicker(String pkg) {
         List<CharSequence> items = new ArrayList<>();
         List<Runnable> actions = new ArrayList<>();
@@ -2491,7 +2491,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         items.add(getString(R.string.new_folder));
         actions.add(() -> showNewFolderDialog(pkg));
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.choose_folder)
                 .setItems(items.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .create());
@@ -2502,7 +2502,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final EditText input = new EditText(this);
         input.setSingleLine();
         input.setHint(R.string.new_folder);
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.new_folder)
                 .setView(input)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
@@ -2522,7 +2522,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         input.setSingleLine();
         input.setText(folder.name);
         input.setSelection(input.getText().length());
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.rename_folder)
                 .setView(input)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
@@ -2576,7 +2576,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         input.setSingleLine();
         input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         input.setHint(R.string.enter_password_hint);
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(title)
                 .setView(input)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
@@ -2606,7 +2606,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     max = Math.max(max, Integer.parseInt(f.id.substring(1)));
                 } catch (NumberFormatException ignored) {
                     // a hand-edited folder id that is not "f<number>": it just never gets that number
-                    android.util.Log.d("TvHome", "folder id without a number: " + f.id);
+                    android.util.Log.d("Veil", "folder id without a number: " + f.id);
                 }
             }
         }
@@ -2691,7 +2691,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         } catch (Exception ignored) {
             // A restricted SSID (some ROMs hide it): the pill keeps the plain connection state.
-            android.util.Log.d("TvHome", "network name unreadable: " + ignored);
+            android.util.Log.d("Veil", "network name unreadable: " + ignored);
         }
         // With a VPN app configured, a VPN that is down matters too: show a red "VPN off" capsule then.
         boolean vpnDown = !vpn && online && !vpnApp.isEmpty();
@@ -2770,7 +2770,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 startService(i);
             }
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "source panel unavailable: " + e);
+            android.util.Log.w("Veil", "source panel unavailable: " + e);
             Toast.makeText(this, R.string.not_available, Toast.LENGTH_SHORT).show();
         }
     }
@@ -2822,7 +2822,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (tim != null) inputs.addAll(tim.getTvInputList());
         } catch (Exception noTvInputService) {
             // service binder is null on boxes with no TV input; the popup just lists Live TV
-            android.util.Log.d("TvHome", "TV input list unavailable: " + noTvInputService);
+            android.util.Log.d("Veil", "TV input list unavailable: " + noTvInputService);
         }
         if (!inputs.isEmpty()) {
             // HDMI ports first in port order, then AV and the rest.

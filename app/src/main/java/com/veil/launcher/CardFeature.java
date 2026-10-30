@@ -44,7 +44,7 @@ final class CardFeature {
                 reporter.failed(e);
             } catch (Exception reporterDead) {
                 // A test reporter that throws must not mask the original failure.
-                android.util.Log.w("TvHome", "card reporter failed: " + reporterDead);
+                android.util.Log.w("Veil", "card reporter failed: " + reporterDead);
             }
             return fallback;
         }

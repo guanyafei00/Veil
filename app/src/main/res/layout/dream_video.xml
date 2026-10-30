@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Screensaver (AerialDream): a full-screen streaming aerial over a quiet corner clock.
+<!-- Screensaver (VideoDream): a full-screen streaming video over a quiet corner clock.
      Falls back to the drifting clock when the network or the video fails. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -7,13 +7,13 @@
     android:background="#FF000000">
 
     <SurfaceView
-        android:id="@+id/aerialSurface"
+        android:id="@+id/videoSurface"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
     <!-- Fallback clock (shown when no video plays): the drifting clock, reused look. -->
     <LinearLayout
-        android:id="@+id/aerialFallback"
+        android:id="@+id/videoFallback"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -46,7 +46,7 @@
 
     <!-- Overlay over the video: a thin corner clock plus the place caption. -->
     <LinearLayout
-        android:id="@+id/aerialOverlay"
+        android:id="@+id/videoOverlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|start"
@@ -60,7 +60,7 @@
             android:baselineAligned="true">
 
             <TextClock
-                android:id="@+id/aerialClock"
+                android:id="@+id/videoClock"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:format12Hour="h:mm"
@@ -91,7 +91,7 @@
         </LinearLayout>
 
         <TextView
-            android:id="@+id/aerialCaption"
+            android:id="@+id/videoCaption"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"

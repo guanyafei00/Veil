@@ -44,7 +44,7 @@ final class FrostGlass {
             return out;
         } catch (Exception | OutOfMemoryError e) {
             // A wallpaper too big to crop (or OOM): the caller falls back to the painted gradient.
-            android.util.Log.w("TvHome", "frost render failed: " + e);
+            android.util.Log.w("Veil", "frost render failed: " + e);
             return null;
         }
     }
@@ -76,7 +76,7 @@ final class FrostGlass {
             finishGlass(cropped, out, 3, 2);
             return out;
         } catch (Exception | OutOfMemoryError e) {
-            android.util.Log.w("TvHome", "frost region render failed: " + e);
+            android.util.Log.w("Veil", "frost region render failed: " + e);
             return null;
         }
     }

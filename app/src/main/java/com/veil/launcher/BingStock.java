@@ -24,11 +24,11 @@ import java.util.Set;
  * unique 4K-capable photographs.
  * <p>
  * It lives in its own class now because it does double duty: the daily wallpaper pulls from it,
- * and it is also the last-resort fallback for the aerial / 360 expansions, so a tap always ends
+ * and it is also the last-resort fallback for the video / 360 expansions, so a tap always ends
  * with real pictures instead of a "server unreachable" toast.
  */
 final class BingStock {
-    private static final String TAG = "TvHome.BingStock";
+    private static final String TAG = "Veil.BingStock";
 
     /** Markets whose daily pictures differ; eight days each, deduped into one shared stock. */
     static final String[] MARKETS = {

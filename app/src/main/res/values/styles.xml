@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.TvHome" parent="android:Theme.Material.NoActionBar.Fullscreen">
+    <style name="Theme.Veil" parent="android:Theme.Material.NoActionBar.Fullscreen">
         <item name="android:windowBackground">@android:color/black</item>
         <item name="android:colorBackground">@android:color/black</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>
 
-    <!-- Settings rides over the live desktop as a half-screen panel (AT4K/Aerial style): the
+    <!-- Settings rides over the live desktop as a half-screen panel (floating panel style): the
          window itself is translucent, so the desktop shows through the dimmed left half while
          the right half carries the panel. The dim is a scrim view, not the window dimmer. -->
-    <style name="Theme.TvHome.Settings" parent="Theme.TvHome">
+    <style name="Theme.Veil.Settings" parent="Theme.Veil">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackground">@android:color/transparent</item>
@@ -19,7 +19,7 @@
     <!-- Dialogs with hard-coded dark colours: some box ROMs (Phicomm N1) restyle the framework's
          Material themes to light, which leaves our menu items as white text on a white dialog.
          Explicit items here win over whatever the ROM did to the parent theme. -->
-    <style name="TvHomeDialog" parent="android:Theme.Material.Dialog.Alert">
+    <style name="VeilDialog" parent="android:Theme.Material.Dialog.Alert">
         <item name="android:windowBackground">#FF2A2A31</item>
         <item name="android:colorBackground">#FF2A2A31</item>
         <item name="android:backgroundDimEnabled">true</item>

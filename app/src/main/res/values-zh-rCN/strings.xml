@@ -20,7 +20,7 @@
     <string name="cant_open">无法打开 %1$s</string>
     <string name="date_format">M月d日 EEEE</string>
     <string name="dream_name">时钟</string>
-    <string name="dream_aerial">航拍屏保</string>
+    <string name="dream_video">航拍屏保</string>
     <string name="all_apps">所有应用</string>
     <string name="no_apps">没有可显示的应用</string>
     <string name="long_press_pin">置顶到程序坞</string>
@@ -53,7 +53,7 @@
     <string name="nothing_hidden">没有被隐藏的应用</string>
     <string name="hidden_apps_title">隐藏的应用（点击可恢复显示）</string>
 
-    <!-- 文件夹与密码锁定（借鉴 AT4K 的文件夹功能）。 -->
+    <!-- 文件夹与密码锁定（借鉴 reference launcher 的文件夹功能）。 -->
     <string name="add_to_folder">添加到文件夹</string>
     <string name="choose_folder">选择文件夹</string>
     <string name="new_folder">新建文件夹</string>
@@ -129,7 +129,7 @@
     <string name="weather_need_city">请先设置城市</string>
     <string name="weather_net_fail">天气服务连不上</string>
 
-    <!-- 快捷功能 + 图标管理（借鉴 AT4K，v2.6） -->
+    <!-- 快捷功能 + 图标管理（借鉴 reference launcher，v2.6） -->
     <string name="weather_unit">温度单位</string>
     <string name="weather_unit_done">温度单位已保存</string>
     <string name="icon_change">更换图标</string>
@@ -172,9 +172,9 @@
     <string name="hero_art_off">聚焦应用大图已关闭</string>
     <string name="wallpaper_bing_off">必应每日壁纸已关闭</string>
     <string name="panel_control">控制中心（实验）</string>
-    <string name="wallpaper_aerial">Apple 航拍壁纸轮换</string>
-    <string name="aerial_on">航拍轮换已开启：按所选间隔自动换图（右侧数字是已缓存张数）</string>
-    <string name="aerial_off">航拍轮换已关闭</string>
+    <string name="wallpaper_video">Apple 航拍壁纸轮换</string>
+    <string name="video_on">航拍轮换已开启：按所选间隔自动换图（右侧数字是已缓存张数）</string>
+    <string name="video_off">航拍轮换已关闭</string>
     <string name="interval_5m">每 5 分钟</string>
     <string name="interval_15m">每 15 分钟</string>
     <string name="interval_30m">每 30 分钟</string>
@@ -182,25 +182,25 @@
     <string name="interval_3h">每 3 小时</string>
     <string name="interval_12h">每 12 小时</string>
     <string name="interval_1d">每天一轮换</string>
-    <string name="aerial_expand">航拍图库扩充</string>
-    <string name="aerial_res">航拍图库分辨率</string>
-    <string name="aerial_res_auto">自动识别</string>
-    <string name="aerial_res_done">航拍图库分辨率已保存</string>
-    <string name="aerial_expand_msg">优先从内置航拍图库释放新静图（无需网络，立即可见）；内置释放完后，网络可用时再从 Apple 视频流补充抽取。</string>
-    <string name="aerial_expand_go">开始扩充</string>
-    <string name="aerial_expanding">扩充中…</string>
-    <string name="aerial_expand_done">新增 %1$d 张，图库共 %2$d 张</string>
-    <string name="aerial_expand_failed">扩充失败（%1$s），请稍后再试</string>
-    <string name="aerial_expand_none">这段视频没抽到可用画面，再点一次换一段</string>
-    <string name="aerial_expand_used_up">片单里的航拍片段都扩充过了，先用电脑端 bat 补充新片单</string>
-    <string name="aerial_err_net">网络不通，连不上片源服务器，请检查盒子网络</string>
-    <string name="aerial_err_timeout">下载超时，网络太慢，稍后再试</string>
-    <string name="aerial_err_decode">下载成功但解不出画面，再点一次换一段</string>
+    <string name="video_expand">航拍图库扩充</string>
+    <string name="video_res">航拍图库分辨率</string>
+    <string name="video_res_auto">自动识别</string>
+    <string name="video_res_done">航拍图库分辨率已保存</string>
+    <string name="video_expand_msg">优先从内置航拍图库释放新静图（无需网络，立即可见）；内置释放完后，网络可用时再从 Apple 视频流补充抽取。</string>
+    <string name="video_expand_go">开始扩充</string>
+    <string name="video_expanding">扩充中…</string>
+    <string name="video_expand_done">新增 %1$d 张，图库共 %2$d 张</string>
+    <string name="video_expand_failed">扩充失败（%1$s），请稍后再试</string>
+    <string name="video_expand_none">这段视频没抽到可用画面，再点一次换一段</string>
+    <string name="video_expand_used_up">片单里的航拍片段都扩充过了，先用电脑端 bat 补充新片单</string>
+    <string name="video_err_net">网络不通，连不上片源服务器，请检查盒子网络</string>
+    <string name="video_err_timeout">下载超时，网络太慢，稍后再试</string>
+    <string name="video_err_decode">下载成功但解不出画面，再点一次换一段</string>
     <string name="bing_rotate">必应壁纸轮换</string>
     <string name="bing_rotate_on">必应轮换已开启：按所选间隔换图库里的必应旧图（右侧数字是已缓存张数）</string>
     <string name="w360_gallery">360 图库分类</string>
-    <string name="aerial_source">航拍图源</string>
-    <string name="sec_aerial">航拍壁纸</string>
+    <string name="video_source">航拍图源</string>
+    <string name="sec_video">航拍壁纸</string>
     <string name="sec_bing">必应壁纸</string>
     <string name="sec_w360">360 图库</string>
     <string name="sec_diag">网络诊断</string>

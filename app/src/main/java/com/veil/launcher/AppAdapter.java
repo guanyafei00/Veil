@@ -164,7 +164,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private List<String> favourites;
     /** Never shown as tiles (res/values/config.xml hidden_apps, or the owner's edits). */
     private Set<String> hidden;
-    /** Folders the owner created (AT4K-like); their apps are not shown as standalone tiles. */
+    /** Folders the owner created (reference-style); their apps are not shown as standalone tiles. */
     private List<Folder> folders;
     /**
      * The owner's own icon order for the free grid (the apps below the dock): package names in
@@ -295,7 +295,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /**
      * Rebuilds the tiles. A shown module card stands in for every tile of its package (same component,
      * so focus follows it); hidden_apps wins over a card, and a card's package in dock_apps takes that slot.
-     * Folders (AT4K-like) come right after the dock, and the apps inside them are not shown again.
+     * Folders (reference-style) come right after the dock, and the apps inside them are not shown again.
      * <p>The scan itself is background work (multi-model review P0): the entries are built on the
      * IO thread and swapped in on the main thread, and only then does {@code onDone} run. Reloads
      * queue in order on the one background thread, so the last one submitted lands last.
@@ -348,7 +348,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             Drawable icon = ri.loadIcon(pm);
             Drawable custom = customIcon(ctx, pkg);
             if (custom != null) {
-                // Icon management (inspired by AT4K): the owner's picture takes the icon slot, and the
+                // Icon management (inspired by reference launcher): the owner's picture takes the icon slot, and the
                 // banner hides so the custom icon is what the tile actually shows.
                 icon = custom;
                 banner = null;
@@ -528,7 +528,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         try {
             ctx.startActivity(i);
         } catch (Exception ex) {
-            android.util.Log.w("TvHome", "cannot open " + e.label + ": " + ex);
+            android.util.Log.w("Veil", "cannot open " + e.label + ": " + ex);
             Toast.makeText(ctx, ctx.getString(R.string.cant_open, e.label), Toast.LENGTH_SHORT).show();
         }
     }
@@ -618,13 +618,13 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             return bmp == null ? null : new android.graphics.drawable.BitmapDrawable(ctx.getResources(), bmp);
         } catch (Exception | OutOfMemoryError bad) {
             // A corrupt or oversized picture just means "no custom icon"; the app's own icon stays.
-            android.util.Log.d("TvHome", "custom icon for " + pkg + " unusable: " + bad);
+            android.util.Log.d("Veil", "custom icon for " + pkg + " unusable: " + bad);
             return null;
         }
     }
 
     /**
-     * Rounds the icon view (0 = square, 0.5 = circle); AT4K-like corner dial. The card behind the
+     * Rounds the icon view (0 = square, 0.5 = circle); reference-style corner dial. The card behind the
      * picture is set transparent in onBindViewHolder, so the clipped corners show whatever is
      * behind the tile (the frosted dock band, the black grid floor) instead of the near-black card
      * background — no hard black edges at any radius.

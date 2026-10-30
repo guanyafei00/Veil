@@ -19,7 +19,7 @@ import java.util.Random;
  * Draws the tvOS style frosted band behind the first (dock) row and adds a gap below it.
  * <p>
  * The band is a vertical gradient plus a fine white grain at low alpha — the "frost" of
- * AT4K's blurred dock, done without a real blur pass a 1 GB box cannot afford. The grain bitmap
+ * reference launcher's blurred dock, done without a real blur pass a 1 GB box cannot afford. The grain bitmap
  * is generated once in code (no asset, no copyright question) and tiled with REPEAT.
  */
 public class DockDecoration extends RecyclerView.ItemDecoration {

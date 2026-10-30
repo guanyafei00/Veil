@@ -38,7 +38,7 @@ import javax.crypto.Cipher;
  */
 final class AdbShell {
 
-    private static final String TAG = "TvHome.Adb";
+    private static final String TAG = "Veil.Adb";
     private static final int A_CNXN = 0x4E584E43, A_AUTH = 0x48545541,
             A_OPEN = 0x4E45504F, A_OKAY = 0x59414B4F, A_WRTE = 0x45545257, A_CLSE = 0x45534C43;
     private static final int A_VERSION = 0x01000001, MAX_PAYLOAD = 4 * 1024;

@@ -20,7 +20,7 @@ import java.net.SocketTimeoutException;
  * guessing. Also reachable over adb: {@code am broadcast -a com.veil.launcher.NETCHECK}.
  */
 final class NetCheck {
-    private static final String TAG = "TvHome.NetCheck";
+    private static final String TAG = "Veil.NetCheck";
 
     /**
      * name | url — the sources the wallpaper panel actually uses.
@@ -34,7 +34,7 @@ final class NetCheck {
             "360 图库 API|http://cdn.apc.360.cn/index.php?c=WallPaper&a=getAppsByCategory&cid=26&start=0&count=3&from=360chrome",
             "360 图床|https://p3.qhimg.com/bdr/__85/t01e2fa62f505895db7.jpg",
             "Wallhaven|https://wallhaven.cc/api/v1/search?categories=010&purity=100",
-            "Apple 航拍列表|https://sylvan.apple.com/Aerials/2x/entries.json",
+            "Apple 航拍列表|https://__APPLE_VIDEOS_CDN_SENTINEL__",
             "必应壁纸|https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=1",
             "必应图库|https://www.bing.com/HPImageArchive.aspx?format=js&idx=0&n=8&mkt=en-US",
             "天气 Open-Meteo|https://api.open-meteo.com/v1/forecast?latitude=39.9&longitude=116.4&current=temperature_2m",

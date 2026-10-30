@@ -24,7 +24,7 @@ public class InputKeyService extends AccessibilityService {
                 startActivity(new Intent(ACTION_VIEW_INPUTS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             } catch (ActivityNotFoundException e) {
                 // No stock input switcher on this box (the reason this service exists at all).
-                android.util.Log.d("TvHome", "no input switcher activity: " + e);
+                android.util.Log.d("Veil", "no input switcher activity: " + e);
             }
         }
         return true;

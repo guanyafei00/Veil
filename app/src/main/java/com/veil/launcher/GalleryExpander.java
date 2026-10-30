@@ -24,23 +24,23 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * One-tap aerial-stills expander: pulls a never-used clip from the bundled playlist, downloads
+ * One-tap video-stills expander: pulls a never-used clip from the bundled playlist, downloads
  * the head of Apple's 2K stream with a plain HTTP range request, and grabs a few frames off the
  * local copy with the system MediaMetadataRetriever (no ffmpeg on the box). The frames are filed
- * into files/aerials/ next to the stills pushed from the PC.
+ * into files/videos/ next to the stills pushed from the PC.
  * <p>Download-then-decode replaced streaming the URL straight into the retriever: several box
  * ROMs (Android 7 especially) fail that path outright, and the error came back as a silent
  * "0 frames added". The download also gets real timeouts, so a dead network reports itself
  * instead of hanging. A clip is only remembered as used when it actually produced frames, so
  * failures can be retried instead of quietly burning the playlist.
- * <p>Head-only is not enough by itself: Apple's aerial .mov files keep their index (moov atom)
+ * <p>Head-only is not enough by itself: Apple's video .mov files keep their index (moov atom)
  * at the END of a 200-800 MB file, so a truncated head copy has no moov and every frame grab
  * came back empty ("downloaded fine, no pictures"). makeFastStart fetches the moov from the
  * tail, rebases its chunk offsets, and splices it in front of the downloaded media data —
  * the classic fast-start layout, minus the hundreds of megabytes we never needed.
  */
-final class AerialExpander {
-    private static final String TAG = "TvHome.AerialExpand";
+final class GalleryExpander {
+    private static final String TAG = "VeilExpand";
 
     /** Frame grab points in microseconds, all inside the first 10 s of the head we download. */
     private static final long[] FRAME_US = {0L, 3_000_000L, 6_000_000L, 9_000_000L};
@@ -55,15 +55,15 @@ final class AerialExpander {
     /** Tail bytes fetched when hunting the moov atom (it sits at the end of these files). */
     private static final long TAIL_MAX = 8L * 1024 * 1024;
     /**
-     * Apple's official tvOS 13+ catalog: the only aerials that exist as 4K masters (13 clips).
+     * Apple's official tvOS 13+ catalog: the only videos that exist as 4K masters (13 clips).
      * The bundled 114-clip playlist is the older tvOS 12 catalog, AVC 1080p only.
      */
-    private static final String ENTRIES_URL = "https://sylvan.apple.com/Aerials/2x/entries.json";
+    private static final String ENTRIES_URL = "https://__APPLE_VIDEOS_CDN_SENTINEL__";
     /** Clips tried per pass: one dead URL must not eat the whole run. */
     private static final int MAX_TRIES = 3;
     /** Bundled stills released per tap while the shipped pool lasts. */
     private static final int BUNDLED_BATCH = 6;
-    private static final Pattern NUM = Pattern.compile("aerial_(\\d+)\\.jpg");
+    private static final Pattern NUM = Pattern.compile("video_(\\d+)\\.jpg");
 
     /** Error codes handed back with onDone; the settings panel maps them to its own strings. */
     static final String ERR_NET = "net";
@@ -87,7 +87,7 @@ final class AerialExpander {
     /** The lowest-level reason the last clip produced nothing — surfaced into the toast. */
     private volatile String detail;
 
-    private AerialExpander(Context ctx, Callback cb) {
+    private GalleryExpander(Context ctx, Callback cb) {
         this.app = ctx.getApplicationContext();
         this.prefs = new PrefsStore(this.app);
         this.cb = cb;
@@ -100,7 +100,7 @@ final class AerialExpander {
             return;
         }
         running = true;
-        new AerialExpander(ctx, cb).run();
+        new GalleryExpander(ctx, cb).run();
     }
 
     private void run() {
@@ -111,13 +111,13 @@ final class AerialExpander {
             try {
                 File dir = Config.dir(app);
                 if (dir == null) throw new IllegalStateException("no files dir");
-                File stills = new File(dir, "aerials");
+                File stills = new File(dir, "videos");
                 if (!stills.exists() && !stills.mkdirs()) throw new IllegalStateException("mkdir failed");
                 File[] have = stills.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
                 total = have == null ? 0 : have.length;
 
                 // Resolution: the owner's pick, or follow the display (4K panel → 4K stills).
-                int res = prefs.loadAerialStillRes();
+                int res = prefs.loadVideoStillRes();
                 android.util.DisplayMetrics dm = app.getResources().getDisplayMetrics();
                 int panel = Math.max(dm.widthPixels, dm.heightPixels);
                 boolean want4k = res == 2160
@@ -133,7 +133,7 @@ final class AerialExpander {
 
                 // Source pick (the owner asked for a manual choice): "auto" runs the whole
                 // chain; any other value forces ONE path, skipping the bundled release too.
-                String source = prefs.loadAerialSource();
+                String source = prefs.loadVideoSource();
                 boolean auto = "auto".equals(source);
 
                 // Bundled stills first: 24 frames pre-extracted from Apple clips ship inside the
@@ -149,14 +149,14 @@ final class AerialExpander {
                     if (got > 0) added = got;
                     else if (error == null) error = ERR_NET;
                 } else if ("w360".equals(source)) {
-                    int got = Wall360.pullInto(app, stills, "aerial_", "9", BUNDLED_BATCH);
+                    int got = Wall360.pullInto(app, stills, "video_", "9", BUNDLED_BATCH);
                     if (got > 0) added = got;
                     else if (error == null) { error = ERR_NET; detail = Wall360.lastPullDetail(); }
                     // Even a forced source gets the Bing fallback: the owner asked for "more
                     // pictures", and a dead source with no fallback is the exact complaint
                     // this expansion was rewritten to end.
                     if (added == 0) {
-                        int fallback = BingStock.pullInto(app, stills, "aerial_", 6, 4);
+                        int fallback = BingStock.pullInto(app, stills, "video_", 6, 4);
                         if (fallback > 0) { added = fallback; error = null; detail = "已用必应高清图补足"; }
                     }
                 } else {
@@ -185,7 +185,7 @@ final class AerialExpander {
                         }
                         if (got > 0) {
                             // Only a clip that actually produced stills counts as used.
-                            prefs.addAerialUsedUrl(baseName(url));
+                            prefs.addVideoUsedUrl(baseName(url));
                             added += got;
                             error = null;
                             break;
@@ -214,7 +214,7 @@ final class AerialExpander {
                     // Apple's CDN and Wallhaven both stay unreachable. After this the expansion
                     // has no dead end left: bundled stills offline, then clips, Wallhaven, 360.
                     if (added == 0 && auto) {
-                        int got = Wall360.pullInto(app, stills, "aerial_", "9", BUNDLED_BATCH);
+                        int got = Wall360.pullInto(app, stills, "video_", "9", BUNDLED_BATCH);
                         if (got > 0) {
                             added = got;
                             error = null;
@@ -227,7 +227,7 @@ final class AerialExpander {
                     // for Android 7's CA store, so it answers on the box no matter what the
                     // other hosts do — and a tap must always end with real pictures.
                     if (added == 0 && auto) {
-                        int fallback = BingStock.pullInto(app, stills, "aerial_", 6, 4);
+                        int fallback = BingStock.pullInto(app, stills, "video_", 6, 4);
                         if (fallback > 0) {
                             added = fallback;
                             error = null;
@@ -250,12 +250,12 @@ final class AerialExpander {
                 final String fe = error, fd = detail;
                 main.post(() -> cb.onDone(fa, ft, fe, fd));
             }
-        }, "aerial-expand").start();
+        }, "video-expand").start();
     }
 
     /**
-     * Copies the next {@code batch} bundled stills (assets/aerial_still/b_NNN.jpg) into the
-     * gallery under the running aerial_N numbering. Returns how many were released; 0 when the
+     * Copies the next {@code batch} bundled stills (assets/video_still/b_NNN.jpg) into the
+     * gallery under the running video_N numbering. Returns how many were released; 0 when the
      * shipped pool is exhausted (the network paths take over).
      */
     private int releaseBundledStills(File stills, int firstIndex, int batch) {
@@ -266,12 +266,12 @@ final class AerialExpander {
                 InputStream in;
                 try {
                     in = app.getAssets().open(String.format(java.util.Locale.US,
-                            "aerial_still/b_%03d.jpg", idx + 1));
+                            "video_still/b_%03d.jpg", idx + 1));
                 } catch (IOException gone) {
                     break;   // the bundled pool is exhausted
                 }
                 try (FileOutputStream fo = new FileOutputStream(new File(stills,
-                        String.format("aerial_%d.jpg", firstIndex + released)))) {
+                        String.format("video_%d.jpg", firstIndex + released)))) {
                     byte[] buf = new byte[16384];
                     int n;
                     while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
@@ -292,14 +292,14 @@ final class AerialExpander {
 
     /**
      * Fallback still source when the video path yields nothing: Wallhaven's public search API
-     * (no key, SFW only) for aerial photographs. Plain JPEG downloads — nothing for the box's
-     * flaky video decoder to choke on — filed into the same aerials/ folder, so rotation picks
+     * (no key, SFW only) for video photographs. Plain JPEG downloads — nothing for the box's
+     * flaky video decoder to choke on — filed into the same videos/ folder, so rotation picks
      * them up like any other still. A random page each run keeps repeats rare.
      */
     private int fetchWallhavenStills(File stills, int firstIndex, boolean want4k) {
         try {
             int page = 1 + (int) (Math.random() * 5);
-            String api = "https://wallhaven.cc/api/v1/search?q=aerial&categories=100&purity=100"
+            String api = "https://wallhaven.cc/api/v1/search?q=video&categories=100&purity=100"
                     + "&atleast=1920x1080&sorting=random&page=" + page;
             JSONObject root = new JSONObject(new String(fetchAll(api), "UTF-8"));
             JSONArray data = root.optJSONArray("data");
@@ -332,7 +332,7 @@ final class AerialExpander {
                 }
                 Bitmap still = coverCrop(bmp, want4k ? STILL_W_4K : STILL_W, want4k ? STILL_H_4K : STILL_H);
                 bmp.recycle();
-                File out = new File(stills, String.format("aerial_%d.jpg", firstIndex + saved));
+                File out = new File(stills, String.format("video_%d.jpg", firstIndex + saved));
                 try (FileOutputStream fo = new FileOutputStream(out)) {
                     still.compress(Bitmap.CompressFormat.JPEG, 85, fo);
                 } finally {
@@ -365,13 +365,13 @@ final class AerialExpander {
 
     /** The first playlist clip whose source has not been pulled yet; null when all are used. */
     private String pickClip() throws Exception {
-        try (InputStream in = app.getAssets().open("aerials.json")) {
+        try (InputStream in = app.getAssets().open("videos.json")) {
             ByteArrayOutputStream bo = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
             while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
             JSONArray clips = new JSONArray(new String(bo.toByteArray(), "UTF-8"));
-            java.util.Set<String> used = prefs.loadAerialUsedUrls();
+            java.util.Set<String> used = prefs.loadVideoUsedUrls();
             for (int i = 0; i < clips.length(); i++) {
                 JSONObject o = clips.optJSONObject(i);
                 if (o == null) continue;
@@ -391,7 +391,7 @@ final class AerialExpander {
      */
     private String pick4kClip() throws Exception {
         JSONArray urls = load4kCatalog();
-        java.util.Set<String> used = prefs.loadAerialUsedUrls();
+        java.util.Set<String> used = prefs.loadVideoUsedUrls();
         for (int i = 0; i < urls.length(); i++) {
             String u = urls.optString(i, "");
             if (u.isEmpty() || used.contains(baseName(u))) continue;
@@ -414,7 +414,7 @@ final class AerialExpander {
     private JSONArray load4kCatalog() throws Exception {
         File base = Config.dir(app);
         if (base == null) throw new IllegalStateException("no files dir");
-        File cache = new File(base, "aerials_4k.json");
+        File cache = new File(base, "videos_4k.json");
         if (cache.isFile() && System.currentTimeMillis() - cache.lastModified() < 86_400_000L) {
             return new JSONArray(readFile(cache));
         }
@@ -491,7 +491,7 @@ final class AerialExpander {
                     }
                     Bitmap still = coverCrop(frame, stillW, stillH);
                     frame.recycle();
-                    File out = new File(stills, String.format("aerial_%d.jpg", firstIndex + saved));
+                    File out = new File(stills, String.format("video_%d.jpg", firstIndex + saved));
                     try (FileOutputStream fo = new FileOutputStream(out)) {
                         still.compress(Bitmap.CompressFormat.JPEG, 85, fo);
                     } finally {
@@ -563,7 +563,7 @@ final class AerialExpander {
             return;
         }
         if (mdatStart < 0) throw new IOException("no mdat in clip head");
-        // moov at the tail: fetch it, patch it, splice it. Apple's aerials end with the moov.
+        // moov at the tail: fetch it, patch it, splice it. Apple's videos end with the moov.
         // The tail is streamed to a temp file (not a byte[]): 8 MB in memory on this box is
         // one OOM away from the failure we are fixing.
         File tailFile = new File(raw.getParentFile(), ".clip.tail");
@@ -715,7 +715,7 @@ final class AerialExpander {
         if (got < 64 * 1024) throw new IOException("clip too small: " + got);
     }
 
-    /** One past the highest aerial_NN.jpg number already in the folder. */
+    /** One past the highest video_NN.jpg number already in the folder. */
     private static int nextIndex(File[] have) {
         int max = 0;
         if (have != null) {

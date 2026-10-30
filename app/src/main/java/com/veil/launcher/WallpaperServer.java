@@ -56,7 +56,7 @@ final class WallpaperServer {
         try {
             server = new ServerSocket(PORT, 2, InetAddress.getByName("0.0.0.0"));
         } catch (IOException e) {
-            android.util.Log.w("TvHome", "wallpaper server bind failed: " + e);
+            android.util.Log.w("Veil", "wallpaper server bind failed: " + e);
             return null;
         }
         running = true;
@@ -84,7 +84,7 @@ final class WallpaperServer {
             } catch (SocketTimeoutException dropped) {
                 // accept() timed out; loop re-checks `running` and exits if stopped.
             } catch (Exception e) {
-                if (running) android.util.Log.d("TvHome", "wallpaper request failed: " + e);
+                if (running) android.util.Log.d("Veil", "wallpaper request failed: " + e);
             }
         }
     }

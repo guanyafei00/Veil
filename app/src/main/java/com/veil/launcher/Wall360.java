@@ -26,7 +26,7 @@ import java.net.URL;
  * window of the chosen category into files/w360/ as rotation stock.
  */
 final class Wall360 {
-    private static final String TAG = "TvHome.Wall360";
+    private static final String TAG = "Veil.Wall360";
     private static final String LIST_URL =
             "http://cdn.apc.360.cn/index.php?c=WallPaper&a=getAppsByCategory&from=360chrome";
 
@@ -97,7 +97,7 @@ final class Wall360 {
     private static final int MAX_BYTES = 30 * 1024 * 1024;
 
     private static volatile boolean running;
-    /** The lowest-level reason the last pull produced nothing (read by AerialExpander). */
+    /** The lowest-level reason the last pull produced nothing (read by GalleryExpander). */
     private static volatile String lastPullDetail;
 
     private final Context app;
@@ -124,7 +124,7 @@ final class Wall360 {
     }
 
     /**
-     * Synchronous pull on the CALLER's thread — the aerial expander's last-chance fallback
+     * Synchronous pull on the CALLER's thread — the video expander's last-chance fallback
      * already runs on its own worker and folds the result into its own callback. Returns the
      * number of pictures added into {@code stock} (named {@code prefix<id>.jpg}); 0 with the
      * reason in {@link #lastPullDetail} when the network gave up.

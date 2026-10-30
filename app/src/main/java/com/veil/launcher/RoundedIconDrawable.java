@@ -48,7 +48,7 @@ final class RoundedIconDrawable extends Drawable {
             Bitmap bmp = bitmapOf(src, capPx);
             return bmp == null ? src : new RoundedIconDrawable(bmp, frac);
         } catch (Exception | OutOfMemoryError e) {
-            android.util.Log.w("TvHome", "icon rounding skipped: " + e);
+            android.util.Log.w("Veil", "icon rounding skipped: " + e);
             return src;
         }
     }

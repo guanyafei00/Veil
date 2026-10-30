@@ -167,7 +167,7 @@
                             android:letterSpacing="0.14"
                             android:textAllCaps="true" />
 
-                        <!-- Weather clock (AT4K borrow): city, current temp, condition, hi/lo. -->
+                        <!-- Weather clock (borrow): city, current temp, condition, hi/lo. -->
                         <TextView
                             android:id="@+id/weather"
                             android:layout_width="match_parent"

@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The launcher's settings, AT4K/Aerial style: a half-screen panel on the right that rides over
+ * The launcher's settings, floating panel style: a half-screen panel on the right that rides over
  * the live desktop (the window is translucent, the left half is a dimmed scrim), never covering
  * the whole screen. Level one is the category list (desktop / wallpaper / screensaver / clock /
  * settings); picking one opens level two — that category's rows — and Back returns to the list.
@@ -65,8 +65,8 @@ public class HomeSettingsActivity extends Activity {
 
     // Values that refresh when a dialog changes a pref; rebuilt per category, so every access
     // is null-guarded (a row that was never built simply has no live TextView).
-    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, liquidGlassValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, aerialValue,
-            bingRotateValue, aerialExpandValue, aerialResValue, aerialSourceValue,
+    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, liquidGlassValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, videoValue,
+            bingRotateValue, videoExpandValue, videoResValue, videoSourceValue,
             w360CatValue, w360ExpandValue, w360RotateValue,
             dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
             topBarColorValue, topTextColorValue,
@@ -79,7 +79,7 @@ public class HomeSettingsActivity extends Activity {
         float d = getResources().getDisplayMetrics().density;
         int screenW = getResources().getDisplayMetrics().widthPixels;
 
-        // The dimmed desktop behind: the window is translucent (Theme.TvHome.Settings), this
+        // The dimmed desktop behind: the window is translucent (Theme.Veil.Settings), this
         // scrim keeps the left half readable without hiding the wallpaper.
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(SCRIM);
@@ -361,26 +361,26 @@ public class HomeSettingsActivity extends Activity {
 
     /**
      * The wallpaper panel, grouped by source and ordered inside each group: pick → tune →
-     * fill. Three picture sources live here (aerial, Bing, the 360 gallery) and their rows used
+     * fill. Three picture sources live here (video, Bing, the 360 gallery) and their rows used
      * to be interleaved, which read as noise on the TV (the owner's report).
      */
     private void buildWallpaperRows() {
         row(getString(R.string.panel_wallpaper), null, v -> showWallpaperDialog());
         row(getString(R.string.scan_upload), null, v -> showQrUpload());
 
-        section(getString(R.string.sec_aerial));
-        row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.AERIAL));
-        row(getString(R.string.wallpaper_aerial), aerialValue = new TextView(this), v -> showAerialIntervalDialog());
-        row(getString(R.string.aerial_source), aerialSourceValue = new TextView(this), v -> showAerialSourceDialog());
-        row(getString(R.string.aerial_res), aerialResValue = new TextView(this), v -> showAerialResDialog());
-        row(getString(R.string.aerial_expand), aerialExpandValue = new TextView(this), v -> showAerialExpandDialog());
+        section(getString(R.string.sec_video));
+        row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.VIDEO));
+        row(getString(R.string.wallpaper_video), videoValue = new TextView(this), v -> showVideoIntervalDialog());
+        row(getString(R.string.video_source), videoSourceValue = new TextView(this), v -> showVideoSourceDialog());
+        row(getString(R.string.video_res), videoResValue = new TextView(this), v -> showVideoResDialog());
+        row(getString(R.string.video_expand), videoExpandValue = new TextView(this), v -> showVideoExpandDialog());
 
         section(getString(R.string.sec_bing));
         row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.BING));
         row(getString(R.string.wallpaper_bing), bingValue = new TextView(this), v -> {
             boolean on = prefs.isBingWallpaperOn();
             prefs.setBingWallpaperOn(!on);
-            if (!on) prefs.setAerialRotateOn(false);
+            if (!on) prefs.setVideoRotateOn(false);
             refreshValues();
             Toast.makeText(this, on ? R.string.wallpaper_bing_off : R.string.wallpaper_bing_on, Toast.LENGTH_SHORT).show();
         });
@@ -404,18 +404,18 @@ public class HomeSettingsActivity extends Activity {
     private void openGallery(WallpaperStock.Source source) {
         startActivity(new Intent(this, WallpaperGalleryActivity.class)
                 .putExtra("source", source.folder.equals("bing") ? "bing"
-                        : source.folder.equals("w360") ? "w360" : "aerial"));
+                        : source.folder.equals("w360") ? "w360" : "video"));
     }
 
     /**
      * The wallpaper-source sweep: DNS, TCP and HTTP for every picture source, with the head of
-     * each answer. The report lands in a dialog (and in logcat, tag TvHome.NetCheck).
+     * each answer. The report lands in a dialog (and in logcat, tag Veil.NetCheck).
      */
     private void runNetCheck() {
         Toast.makeText(this, R.string.net_check_running, Toast.LENGTH_SHORT).show();
         NetCheck.run(this, report -> {
-            android.util.Log.d("TvHome.NetCheck", "===== panel report =====\n" + report);
-            Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+            android.util.Log.d("Veil.NetCheck", "===== panel report =====\n" + report);
+            Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                     .setTitle(R.string.net_check)
                     .setMessage(report)
                     .setPositiveButton(android.R.string.ok, null)
@@ -607,12 +607,12 @@ public class HomeSettingsActivity extends Activity {
         set(heroArtValue, prefs.isHeroArtOn() ? "开" : "关");
         set(bingValue, prefs.isBingWallpaperOn() ? getString(R.string.enabled_suffix).replace("（", "").replace("）", "") : "关");
         File base = Config.dir(this);
-        File[] stills = base == null ? null : new File(base, "aerials").listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
-        set(aerialValue, prefs.isAerialRotateOn()
-                ? intervalName(prefs.loadAerialIntervalMin()) + " · " + (stills == null ? 0 : stills.length) + " 张" : "关");
-        set(aerialExpandValue, (stills == null ? 0 : stills.length) + " 张");
-        set(aerialResValue, aerialResName());
-        set(aerialSourceValue, aerialSourceName(prefs.loadAerialSource()));
+        File[] stills = base == null ? null : new File(base, "videos").listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
+        set(videoValue, prefs.isVideoRotateOn()
+                ? intervalName(prefs.loadVideoIntervalMin()) + " · " + (stills == null ? 0 : stills.length) + " 张" : "关");
+        set(videoExpandValue, (stills == null ? 0 : stills.length) + " 张");
+        set(videoResValue, videoResName());
+        set(videoSourceValue, videoSourceName(prefs.loadVideoSource()));
         File[] stock = base == null ? null : new File(base, "bing").listFiles((d, n) -> n.toLowerCase().endsWith(".jpg"));
         int stockN = stock == null ? 0 : stock.length;
         set(bingRotateValue, prefs.isBingRotateOn()
@@ -662,28 +662,28 @@ public class HomeSettingsActivity extends Activity {
         }
     }
 
-    /** The aerial still resolution: the pick, plus what "auto" currently resolves to. */
-    private String aerialResName() {
-        int res = prefs.loadAerialStillRes();
+    /** The video still resolution: the pick, plus what "auto" currently resolves to. */
+    private String videoResName() {
+        int res = prefs.loadVideoStillRes();
         if (res == 1080) return "1080p";
         if (res == 2160) return "4K";
         android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
         boolean screen4k = Math.max(dm.widthPixels, dm.heightPixels) >= 3000;
-        return getString(R.string.aerial_res_auto) + " · " + (screen4k ? "4K" : "1080p");
+        return getString(R.string.video_res_auto) + " · " + (screen4k ? "4K" : "1080p");
     }
 
     /** Still resolution pick: auto / 1080p / 4K (4K pulls Apple's official HEVC catalog). */
-    private void showAerialResDialog() {
-        String[] labels = {getString(R.string.aerial_res_auto), "1080p", "4K"};
+    private void showVideoResDialog() {
+        String[] labels = {getString(R.string.video_res_auto), "1080p", "4K"};
         int cur;
-        switch (prefs.loadAerialStillRes()) {
+        switch (prefs.loadVideoStillRes()) {
             case 1080: cur = 1; break;
             case 2160: cur = 2; break;
             default: cur = 0;
         }
-        showOptions(getString(R.string.aerial_res), labels, cur, idx -> {
-            prefs.saveAerialStillRes(idx == 2 ? 2160 : idx == 1 ? 1080 : 0);
-            Toast.makeText(this, R.string.aerial_res_done, Toast.LENGTH_SHORT).show();
+        showOptions(getString(R.string.video_res), labels, cur, idx -> {
+            prefs.saveVideoStillRes(idx == 2 ? 2160 : idx == 1 ? 1080 : 0);
+            Toast.makeText(this, R.string.video_res_done, Toast.LENGTH_SHORT).show();
         });
     }
 
@@ -723,7 +723,7 @@ public class HomeSettingsActivity extends Activity {
             return;
         }
         String[] names = hidden.toArray(new String[0]);
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.hidden_apps_title)
                 .setItems(names, (d, which) -> {
                     Set<String> copy = new LinkedHashSet<>(hidden);
@@ -814,23 +814,23 @@ public class HomeSettingsActivity extends Activity {
         options.add(getString(R.string.wallpaper_bing) + (bing ? getString(R.string.enabled_suffix) : ""));
         actions.add(() -> {
             prefs.setBingWallpaperOn(!bing);
-            if (!bing) prefs.setAerialRotateOn(false);
+            if (!bing) prefs.setVideoRotateOn(false);
             if (!bing) Toast.makeText(this, R.string.wallpaper_bing_on, Toast.LENGTH_LONG).show();
             else Toast.makeText(this, R.string.wallpaper_bing_off, Toast.LENGTH_LONG).show();
         });
-        boolean aerial = prefs.isAerialRotateOn();
-        options.add(getString(R.string.wallpaper_aerial)
-                + (aerial ? " · " + intervalName(prefs.loadAerialIntervalMin()) : ""));
-        actions.add(this::showAerialIntervalDialog);
+        boolean video = prefs.isVideoRotateOn();
+        options.add(getString(R.string.wallpaper_video)
+                + (video ? " · " + intervalName(prefs.loadVideoIntervalMin()) : ""));
+        actions.add(this::showVideoIntervalDialog);
         if (hasWallpaper) {
             options.add(getString(R.string.wallpaper_reset));
             actions.add(() -> {
                 prefs.setBingWallpaperOn(false);
-                prefs.setAerialRotateOn(false);
+                prefs.setVideoRotateOn(false);
                 resetWallpaper();
             });
         }
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.panel_wallpaper)
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .setNegativeButton(android.R.string.cancel, null)
@@ -867,7 +867,7 @@ public class HomeSettingsActivity extends Activity {
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
             Toast.makeText(this, R.string.wallpaper_done, Toast.LENGTH_LONG).show();
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "wallpaper save failed: " + e);
+            android.util.Log.w("Veil", "wallpaper save failed: " + e);
             Toast.makeText(this, R.string.wallpaper_failed, Toast.LENGTH_LONG).show();
         }
     }
@@ -919,7 +919,7 @@ public class HomeSettingsActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         box.addView(hint, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.scan_upload)
                 .setView(box)
                 .setPositiveButton(android.R.string.ok, null)
@@ -927,7 +927,7 @@ public class HomeSettingsActivity extends Activity {
                 .create());
     }
 
-    // ---- status bar / dock colours (inspired by AT4K) -------------------------------------------
+    // ---- status bar / dock colours (inspired by reference launcher) -------------------------------------------
 
     private static final String[] COLOR_NAMES = {"黑色", "深灰", "半透明白", "蓝色", "绿色", "红色", "紫色", "橙色"};
     private static final int[] BG_COLORS = {0xFF000000, 0xE61E1E20, 0x80FFFFFF, 0xE61565C0, 0xE62E7D32, 0xE6B71C1C, 0xE66A1B9A, 0xE6EF6C00};
@@ -984,7 +984,7 @@ public class HomeSettingsActivity extends Activity {
             prefs.setWeatherFahrenheit(!f);
             Toast.makeText(this, R.string.weather_unit_done, Toast.LENGTH_SHORT).show();
         });
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.panel_weather)
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .setNegativeButton(android.R.string.cancel, null)
@@ -996,7 +996,7 @@ public class HomeSettingsActivity extends Activity {
         final EditText input = new EditText(this);
         input.setSingleLine();
         input.setHint(R.string.weather_city_hint);
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.weather_city)
                 .setView(input)
                 .setPositiveButton(R.string.weather_search, (d, which) -> {
@@ -1014,7 +1014,7 @@ public class HomeSettingsActivity extends Activity {
                             }
                             String[] names = new String[hits.length];
                             for (int i = 0; i < hits.length; i++) names[i] = hits[i][0];
-                            Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+                            Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                                     .setTitle(R.string.weather_city)
                                     .setItems(names, (dd, w) -> {
                                         try {
@@ -1039,7 +1039,7 @@ public class HomeSettingsActivity extends Activity {
         try {
             return java.net.URLEncoder.encode(s, "UTF-8");
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "url encode failed: " + e);
+            android.util.Log.w("Veil", "url encode failed: " + e);
             return s;
         }
     }
@@ -1062,7 +1062,7 @@ public class HomeSettingsActivity extends Activity {
             }
             return out;
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "geocoding payload unusable: " + e);
+            android.util.Log.w("Veil", "geocoding payload unusable: " + e);
             return new String[0][];
         }
     }
@@ -1071,7 +1071,7 @@ public class HomeSettingsActivity extends Activity {
         String body = Http.getStringOrNull(url, 8000, 8000);
         if (body == null) {
             // Expected when the box is offline; debug level so a real problem is still traceable.
-            android.util.Log.d("TvHome", "GET failed for " + url);
+            android.util.Log.d("Veil", "GET failed for " + url);
         }
         return body;
     }
@@ -1116,7 +1116,7 @@ public class HomeSettingsActivity extends Activity {
 
     /** The lock only bites once the LockService accessibility service is enabled in system settings. */
     private void showLockGuide() {
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.lock_guide_title)
                 .setMessage(R.string.lock_guide_message)
                 .setPositiveButton(R.string.lock_go_accessibility,
@@ -1150,7 +1150,7 @@ public class HomeSettingsActivity extends Activity {
      * <p>The stored component names come in two shapes: the full form
      * "package/full.class.Name" and the short form "package/.ClassName" (some ROMs and some
      * settings paths store the short one). Matching only the full form read "off" while the
-     * system page showed the service enabled — the owner's report. Also: the old gathin build
+     * system page showed the service enabled — the owner's report. Also: an earlier build
      * is still installed under the same service label, so an enabled entry for THAT package
      * must not count here.
      */
@@ -1220,7 +1220,7 @@ public class HomeSettingsActivity extends Activity {
         input.setSingleLine();
         input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
         input.setHint(R.string.enter_password_hint);
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(title)
                 .setView(input)
                 .setPositiveButton(android.R.string.ok, (d, which) -> {
@@ -1247,7 +1247,7 @@ public class HomeSettingsActivity extends Activity {
         actions.add(() -> adbRun("reboot"));
         options.add(getString(R.string.control_poweroff));
         actions.add(() -> adbRun("reboot -p"));
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.panel_control)
                 .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
                 .setNegativeButton(android.R.string.cancel, null)
@@ -1257,7 +1257,7 @@ public class HomeSettingsActivity extends Activity {
     /** Runs one command on a worker thread and reports back; first run guides the owner to Allow. */
     private void adbRun(String command) {
         Toast.makeText(this, R.string.control_grant_hint, Toast.LENGTH_LONG).show();
-        final android.app.ProgressDialog wait = new android.app.ProgressDialog(this, R.style.TvHomeDialog);
+        final android.app.ProgressDialog wait = new android.app.ProgressDialog(this, R.style.VeilDialog);
         wait.setMessage(getString(R.string.control_waiting));
         wait.show();
         Dialogs.style(wait);
@@ -1265,7 +1265,7 @@ public class HomeSettingsActivity extends Activity {
             try {
                 wait.dismiss();
             } catch (Exception e) {
-                android.util.Log.d("TvHome", "progress dialog already gone: " + e);
+                android.util.Log.d("Veil", "progress dialog already gone: " + e);
             }
             if (!ok) {
                 String msg = "AUTH_WAIT".equals(output)
@@ -1278,7 +1278,7 @@ public class HomeSettingsActivity extends Activity {
             if (trimmed.isEmpty()) {
                 Toast.makeText(this, R.string.control_done, Toast.LENGTH_LONG).show();
             } else {
-                Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+                Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                         .setTitle(R.string.panel_control)
                         .setMessage(trimmed)
                         .setPositiveButton(android.R.string.ok, null)
@@ -1289,37 +1289,37 @@ public class HomeSettingsActivity extends Activity {
 
     // ---- quick extras: icon radius / cadences / expander -----------------------------------------
 
-    /** The aerial rotation cadence: off, or every 5 minutes up to once a day (the default). */
-    private void showAerialIntervalDialog() {
+    /** The video rotation cadence: off, or every 5 minutes up to once a day (the default). */
+    private void showVideoIntervalDialog() {
         final int[] mins = {0, 5, 15, 30, 60, 180, 720, 1440};
-        String[] names = {getString(R.string.aerial_off), getString(R.string.interval_5m),
+        String[] names = {getString(R.string.video_off), getString(R.string.interval_5m),
                 getString(R.string.interval_15m), getString(R.string.interval_30m),
                 getString(R.string.interval_1h), getString(R.string.interval_3h),
                 getString(R.string.interval_12h), getString(R.string.interval_1d)};
-        int current = prefs.isAerialRotateOn() ? prefs.loadAerialIntervalMin() : 0;
+        int current = prefs.isVideoRotateOn() ? prefs.loadVideoIntervalMin() : 0;
         int curIdx = 0;
         for (int i = 0; i < mins.length; i++) {
             if (mins[i] == current) curIdx = i;
         }
-        showOptions(getString(R.string.wallpaper_aerial), names, curIdx, idx -> {
+        showOptions(getString(R.string.wallpaper_video), names, curIdx, idx -> {
             if (mins[idx] == 0) {
-                prefs.setAerialRotateOn(false);
+                prefs.setVideoRotateOn(false);
             } else {
-                boolean wasOff = !prefs.isAerialRotateOn();
-                prefs.setAerialRotateOn(true);
+                boolean wasOff = !prefs.isVideoRotateOn();
+                prefs.setVideoRotateOn(true);
                 prefs.setBingRotateOn(false);   // the two rotations are mutually exclusive
                 prefs.setW360RotateOn(false);
-                prefs.saveAerialIntervalMin(mins[idx]);
-                prefs.saveAerialLastAt(0L);   // rotate right away: the pick shows at once
-                if (wasOff) Toast.makeText(this, R.string.aerial_on, Toast.LENGTH_SHORT).show();
+                prefs.saveVideoIntervalMin(mins[idx]);
+                prefs.saveVideoLastAt(0L);   // rotate right away: the pick shows at once
+                if (wasOff) Toast.makeText(this, R.string.video_on, Toast.LENGTH_SHORT).show();
             }
         });
     }
 
-    /** Bing stock rotation: the same cadence picks as the aerial rotation, opposite exclusivity. */
+    /** Bing stock rotation: the same cadence picks as the video rotation, opposite exclusivity. */
     private void showBingIntervalDialog() {
         final int[] mins = {0, 5, 15, 30, 60, 180, 720, 1440};
-        String[] names = {getString(R.string.aerial_off), getString(R.string.interval_5m),
+        String[] names = {getString(R.string.video_off), getString(R.string.interval_5m),
                 getString(R.string.interval_15m), getString(R.string.interval_30m),
                 getString(R.string.interval_1h), getString(R.string.interval_3h),
                 getString(R.string.interval_12h), getString(R.string.interval_1d)};
@@ -1334,7 +1334,7 @@ public class HomeSettingsActivity extends Activity {
             } else {
                 boolean wasOff = !prefs.isBingRotateOn();
                 prefs.setBingRotateOn(true);
-                prefs.setAerialRotateOn(false);   // the aerial rotation yields the slot
+                prefs.setVideoRotateOn(false);   // the video rotation yields the slot
                 prefs.setW360RotateOn(false);     // so does the 360 rotation
                 prefs.saveBingIntervalMin(mins[idx]);
                 prefs.saveBingLastAt(0L);   // rotate right away: the pick shows at once
@@ -1345,8 +1345,8 @@ public class HomeSettingsActivity extends Activity {
 
     // ---- 360 gallery (Wall360): category pick / one-tap expansion / rotation ---------------------
 
-    /** Aerial expansion source: auto chain, or force ONE of the paths (the owner's ask). */
-    private void showAerialSourceDialog() {
+    /** Video expansion source: auto chain, or force ONE of the paths (the owner's ask). */
+    private void showVideoSourceDialog() {
         final String[] ids = {"auto", "apple", "wallhaven", "w360", "video"};
         final String[] names = {
                 "自动（内置 → Apple 视频 → Wallhaven → 360）",
@@ -1355,20 +1355,20 @@ public class HomeSettingsActivity extends Activity {
                 "仅 360 图库（国内直连，最稳）",
                 "航拍视频（动态背景，在线真播）",
         };
-        String cur = prefs.loadAerialSource();
+        String cur = prefs.loadVideoSource();
         int curIdx = 0;
         for (int i = 0; i < ids.length; i++) {
             if (ids[i].equals(cur)) curIdx = i;
         }
-        showOptions(getString(R.string.aerial_source), names, curIdx, idx -> {
-            prefs.saveAerialSource(ids[idx]);
+        showOptions(getString(R.string.video_source), names, curIdx, idx -> {
+            prefs.saveVideoSource(ids[idx]);
             refreshValues();
             Toast.makeText(this, "航拍图源：" + names[idx], Toast.LENGTH_SHORT).show();
         });
     }
 
-    /** Human name of an aerial source id for the row's value column. */
-    private String aerialSourceName(String source) {
+    /** Human name of an video source id for the row's value column. */
+    private String videoSourceName(String source) {
         switch (source) {
             case "apple": return "仅 Apple 视频";
             case "wallhaven": return "仅 Wallhaven";
@@ -1398,7 +1398,7 @@ public class HomeSettingsActivity extends Activity {
             Toast.makeText(this, R.string.w360_expanding, Toast.LENGTH_SHORT).show();
             return;
         }
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.w360_expand)
                 .setMessage("从「" + Wall360.catName(prefs.loadW360Cat())
                         + "」随机拉取一批壁纸（约 12 张），需要网络。继续？")
@@ -1437,10 +1437,10 @@ public class HomeSettingsActivity extends Activity {
         });
     }
 
-    /** 360 rotation cadence: the same picks as the aerial/Bing rotations, shared exclusivity. */
+    /** 360 rotation cadence: the same picks as the video/Bing rotations, shared exclusivity. */
     private void showW360IntervalDialog() {
         final int[] mins = {0, 5, 15, 30, 60, 180, 720, 1440};
-        String[] names = {getString(R.string.aerial_off), getString(R.string.interval_5m),
+        String[] names = {getString(R.string.video_off), getString(R.string.interval_5m),
                 getString(R.string.interval_15m), getString(R.string.interval_30m),
                 getString(R.string.interval_1h), getString(R.string.interval_3h),
                 getString(R.string.interval_12h), getString(R.string.interval_1d)};
@@ -1455,7 +1455,7 @@ public class HomeSettingsActivity extends Activity {
             } else {
                 boolean wasOff = !prefs.isW360RotateOn();
                 prefs.setW360RotateOn(true);
-                prefs.setAerialRotateOn(false);   // one rotation owns the wallpaper slot
+                prefs.setVideoRotateOn(false);   // one rotation owns the wallpaper slot
                 prefs.setBingRotateOn(false);
                 prefs.saveW360IntervalMin(mins[idx]);
                 prefs.saveW360LastAt(0L);   // rotate right away: the pick shows at once
@@ -1466,49 +1466,49 @@ public class HomeSettingsActivity extends Activity {
     }
 
     /**
-     * The one-tap aerial-stills expander. Confirms the ~10-30 MB download first, then pulls a
+     * The one-tap video-stills expander. Confirms the ~10-30 MB download first, then pulls a
      * fresh clip and files a few frames; the row stays disabled and shows the progress while it
      * runs. Failures come back as error codes and are explained in the owner's language.
      */
-    private void showAerialExpandDialog() {
-        if (aerialExpandBusy) {
-            Toast.makeText(this, R.string.aerial_expanding, Toast.LENGTH_SHORT).show();
+    private void showVideoExpandDialog() {
+        if (videoExpandBusy) {
+            Toast.makeText(this, R.string.video_expanding, Toast.LENGTH_SHORT).show();
             return;
         }
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
-                .setTitle(R.string.aerial_expand)
-                .setMessage(R.string.aerial_expand_msg)
-                .setPositiveButton(R.string.aerial_expand_go, (d, w) -> expandAerialStock())
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
+                .setTitle(R.string.video_expand)
+                .setMessage(R.string.video_expand_msg)
+                .setPositiveButton(R.string.video_expand_go, (d, w) -> expandVideoStock())
                 .setNegativeButton(android.R.string.cancel, null)
                 .create());
     }
 
-    private boolean aerialExpandBusy;
+    private boolean videoExpandBusy;
 
-    private void expandAerialStock() {
-        aerialExpandBusy = true;
-        set(aerialExpandValue, getString(R.string.aerial_expanding));
-        Toast.makeText(this, R.string.aerial_expanding, Toast.LENGTH_SHORT).show();
-        AerialExpander.expand(this, (added, total, error, detail) -> {
-            aerialExpandBusy = false;
+    private void expandVideoStock() {
+        videoExpandBusy = true;
+        set(videoExpandValue, getString(R.string.video_expanding));
+        Toast.makeText(this, R.string.video_expanding, Toast.LENGTH_SHORT).show();
+        GalleryExpander.expand(this, (added, total, error, detail) -> {
+            videoExpandBusy = false;
             refreshValues();
             if (error != null) {
                 int msgRes;
                 switch (error) {
-                    case AerialExpander.ERR_NET: msgRes = R.string.aerial_err_net; break;
-                    case AerialExpander.ERR_TIMEOUT: msgRes = R.string.aerial_err_timeout; break;
-                    case AerialExpander.ERR_EXHAUSTED: msgRes = R.string.aerial_expand_used_up; break;
-                    default: msgRes = R.string.aerial_err_decode; break;
+                    case GalleryExpander.ERR_NET: msgRes = R.string.video_err_net; break;
+                    case GalleryExpander.ERR_TIMEOUT: msgRes = R.string.video_err_timeout; break;
+                    case GalleryExpander.ERR_EXHAUSTED: msgRes = R.string.video_expand_used_up; break;
+                    default: msgRes = R.string.video_err_decode; break;
                 }
                 // The low-level reason rides along: a screenshot of this toast pins the failure.
                 String msg = detail == null || detail.isEmpty()
                         ? getString(msgRes) : getString(msgRes) + "\n[" + detail + "]";
                 Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
             } else if (added > 0) {
-                Toast.makeText(this, getString(R.string.aerial_expand_done, added, total),
+                Toast.makeText(this, getString(R.string.video_expand_done, added, total),
                         Toast.LENGTH_LONG).show();
             } else {
-                Toast.makeText(this, R.string.aerial_expand_none, Toast.LENGTH_LONG).show();
+                Toast.makeText(this, R.string.video_expand_none, Toast.LENGTH_LONG).show();
             }
         });
     }
@@ -1559,7 +1559,7 @@ public class HomeSettingsActivity extends Activity {
         // The version goes in here too: the owner needs to be able to tell at a glance which
         // build is on the box (a release is only useful if the installed one can be named).
         msg = versionLine() + "\n" + msg;
-        Dialogs.show(new AlertDialog.Builder(this, R.style.TvHomeDialog)
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.panel_about)
                 .setMessage(msg)
                 .setPositiveButton(android.R.string.ok, null)

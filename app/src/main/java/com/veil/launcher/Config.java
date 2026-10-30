@@ -28,7 +28,7 @@ import java.util.List;
  * is cached and re-read only when config.json or the wallpaper file changes on disk.
  */
 final class Config {
-    private static final String TAG = "TvHome.Config";
+    private static final String TAG = "Veil.Config";
     static final String FILE_NAME = "config.json";
     static final String WALLPAPER_NAME = "wallpaper.jpg";
 

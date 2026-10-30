@@ -11,7 +11,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * The invisible launcher watchdog (the owner's ask, modelled on at4k's accessibility keep-alive):
+ * The invisible launcher watchdog (the owner's ask, modelled on reference launcher's accessibility keep-alive):
  * whenever another HOME/launcher app crawls to the foreground, this service pulls OUR desktop back
  * to the front, so the parents' TV stays on this launcher and never silently drifts to the box's
  * stock home.
@@ -54,7 +54,7 @@ public class LauncherGuardService extends AccessibilityService {
                 if (!getPackageName().equals(pkg)) out.add(pkg);
             }
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "guard: home list unavailable: " + e);
+            android.util.Log.w("Veil", "guard: home list unavailable: " + e);
         }
         otherHomes = out;
         cachedAt = now;

@@ -25,7 +25,7 @@ import java.util.Random;
 
 /**
  * The launcher's own screensaver (the owner's ask): after the chosen idle minutes the home screen
- * hands the screen over to this — the cached Apple aerial stills and the Bing picture of the day,
+ * hands the screen over to this — the cached Apple video stills and the Bing picture of the day,
  * one full-screen picture at a time, crossfaded, with a slow zoom so nothing stays still long
  * enough to burn in, and a big clock over the art like Apple's. Any key or touch ends it.
  * <p>
@@ -125,7 +125,7 @@ public class ScreensaverActivity extends Activity {
     }
 
     /**
-     * The current wallpaper slot first, then the cached Bing stock and the cached aerial
+     * The current wallpaper slot first, then the cached Bing stock and the cached video
      * stills in a shuffled order (the stock grows on its own: one Bing picture a day).
      */
     private void collectPool() {
@@ -140,9 +140,9 @@ public class ScreensaverActivity extends Activity {
             Collections.shuffle(list, rnd);
             pool.addAll(list);
         }
-        File aerials = dir != null ? new File(dir, "aerials") : null;
-        File[] stills = aerials != null
-                ? aerials.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg")) : null;
+        File videos = dir != null ? new File(dir, "videos") : null;
+        File[] stills = videos != null
+                ? videos.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg")) : null;
         if (stills != null && stills.length > 0) {
             List<File> list = new ArrayList<>(Arrays.asList(stills));
             Collections.shuffle(list, rnd);
@@ -216,7 +216,7 @@ public class ScreensaverActivity extends Activity {
             o.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;   // sky banding in 565
             return android.graphics.BitmapFactory.decodeFile(file.getPath(), o);
         } catch (Exception | OutOfMemoryError e) {
-            android.util.Log.w("TvHome", "screensaver picture unreadable: " + e);
+            android.util.Log.w("Veil", "screensaver picture unreadable: " + e);
             return null;
         }
     }

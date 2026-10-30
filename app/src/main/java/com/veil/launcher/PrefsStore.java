@@ -26,8 +26,8 @@ import java.util.Set;
  * files folder, import reads it back. Nothing here touches the network.
  */
 final class PrefsStore {
-    private static final String TAG = "TvHome.Prefs";
-    private static final String PREFS = "tvhome_prefs";
+    private static final String TAG = "Veil.Prefs";
+    private static final String PREFS = "veil_prefs";
     private static final String KEY_DOCK = "dock_apps";
     private static final String KEY_HIDDEN = "hidden_apps";
     /**
@@ -59,10 +59,10 @@ final class PrefsStore {
     private static final String KEY_BING_WALLPAPER = "bing_wallpaper";
     private static final String KEY_BING_DATE = "bing_wallpaper_date";
     private static final String KEY_BING_STOCK_DATE = "bing_stock_date";
-    private static final String KEY_AERIAL_ROTATE = "aerial_rotate";
-    private static final String KEY_AERIAL_INDEX = "aerial_wallpaper_index";
-    private static final String KEY_AERIAL_INTERVAL = "aerial_interval_min";
-    private static final String KEY_AERIAL_LAST = "aerial_last_at";
+    private static final String KEY_VIDEO_ROTATE = "video_rotate";
+    private static final String KEY_VIDEO_INDEX = "video_wallpaper_index";
+    private static final String KEY_VIDEO_INTERVAL = "video_interval_min";
+    private static final String KEY_VIDEO_LAST = "video_last_at";
     private static final String KEY_BING_ROTATE = "bing_rotate";
     private static final String KEY_BING_INTERVAL = "bing_interval_min";
     private static final String KEY_BING_LAST = "bing_last_at";
@@ -77,10 +77,10 @@ final class PrefsStore {
     private static final String KEY_W360_CATALOG_PREFIX = "w360_catalog_";
     /** Prefix for the per-category window cursor ("w360_cursor_26" → 245). */
     private static final String KEY_W360_CURSOR_PREFIX = "w360_cursor_";
-    private static final String KEY_AERIAL_USED_URLS = "aerial_used_urls";
-    private static final String KEY_AERIAL_STILL_RES = "aerial_still_res";
-    /** Aerial expansion source: auto | apple | wallhaven | w360 | video (the owner's manual override). */
-    private static final String KEY_AERIAL_SOURCE = "aerial_source";
+    private static final String KEY_VIDEO_USED_URLS = "video_used_urls";
+    private static final String KEY_VIDEO_STILL_RES = "video_still_res";
+    /** Video expansion source: auto | apple | wallhaven | w360 | video (the owner's manual override). */
+    private static final String KEY_VIDEO_SOURCE = "video_source";
     /** First page shows the dock row (off = pure wallpaper page, the dock apps join the grid). */
     private static final String KEY_DOCK_VISIBLE = "dock_visible";
     /** Dock focus swaps the wallpaper for the focused app's own banner art (Apple TV style). */
@@ -95,7 +95,7 @@ final class PrefsStore {
     private static final String KEY_SCREENSAVER_ON = "screensaver_on";
     /** Idle minutes before the screensaver starts (1…30); only read while it is on. */
     private static final String KEY_SCREENSAVER_DELAY = "screensaver_delay_min";
-    /** The clock over the screensaver art; on by default, like the Apple/AT4K look. */
+    /** The clock over the screensaver art; on by default, like the Apple TV look. */
     private static final String KEY_SCREENSAVER_CLOCK = "screensaver_clock";
     /** One-shot migration flag: v2.9 resets the dock to the new 5-app default and the dock colour. */
     private static final String KEY_MIGRATED_29 = "migrated_v29b";
@@ -110,7 +110,7 @@ final class PrefsStore {
      * rest or waits pure-wallpaper for a Down press.
      */
     private static final String KEY_DOCK_BAR = "dock_bar_on";
-    private static final String BACKUP_NAME = "tvhome-backup.json";
+    private static final String BACKUP_NAME = "veil-backup.json";
 
     private final SharedPreferences sp;
 
@@ -292,7 +292,7 @@ final class PrefsStore {
         return sp.getLong(KEY_WEATHER_TIME, 0);
     }
 
-    // ---- quick extras (inspired by AT4Ks) --------------------------------------------------------------
+    // ---- quick extras (inspired by reference launchers) --------------------------------------------------------------
 
     /** The owner's 24-hour clock pick; off = follow the system setting (the built-in behaviour). */
     boolean isForce24h() {
@@ -356,22 +356,22 @@ final class PrefsStore {
         sp.edit().putBoolean("wallpaper_reset", reset).apply();
     }
 
-    /** How many of the APK's bundled aerial stills have already been released into the gallery. */
+    /** How many of the APK's bundled video stills have already been released into the gallery. */
     int loadBundledReleased() {
-        return sp.getInt("aerial_bundled_released", 0);
+        return sp.getInt("video_bundled_released", 0);
     }
 
     void saveBundledReleased(int count) {
-        sp.edit().putInt("aerial_bundled_released", count).apply();
+        sp.edit().putInt("video_bundled_released", count).apply();
     }
 
-    /** Apple aerial wallpaper rotation: show the next cached still every time the desktop starts. */
-    boolean isAerialRotateOn() {
-        return sp.getBoolean(KEY_AERIAL_ROTATE, false);
+    /** Apple video wallpaper rotation: show the next cached still every time the desktop starts. */
+    boolean isVideoRotateOn() {
+        return sp.getBoolean(KEY_VIDEO_ROTATE, false);
     }
 
-    void setAerialRotateOn(boolean on) {
-        sp.edit().putBoolean(KEY_AERIAL_ROTATE, on).apply();
+    void setVideoRotateOn(boolean on) {
+        sp.edit().putBoolean(KEY_VIDEO_ROTATE, on).apply();
     }
 
     /** Default true: the dock row shows until the owner picks the pure-wallpaper first page. */
@@ -405,7 +405,7 @@ final class PrefsStore {
         sp.edit().putBoolean(KEY_PREVIEW_ON, on).apply();
     }
 
-    /** The launcher's own screensaver (aerial stills + the Bing picture, clock on top). */
+    /** The launcher's own screensaver (video stills + the Bing picture, clock on top). */
     boolean isScreensaverOn() {
         return sp.getBoolean(KEY_SCREENSAVER_ON, false);
     }
@@ -431,30 +431,30 @@ final class PrefsStore {
         sp.edit().putBoolean(KEY_SCREENSAVER_CLOCK, on).apply();
     }
 
-    int loadAerialIndex() {
-        return sp.getInt(KEY_AERIAL_INDEX, 0);
+    int loadVideoIndex() {
+        return sp.getInt(KEY_VIDEO_INDEX, 0);
     }
 
-    void saveAerialIndex(int index) {
-        sp.edit().putInt(KEY_AERIAL_INDEX, index).apply();
+    void saveVideoIndex(int index) {
+        sp.edit().putInt(KEY_VIDEO_INDEX, index).apply();
     }
 
-    /** Aerial rotation cadence in minutes (minimum 5, default a day); 0 is never stored here. */
-    int loadAerialIntervalMin() {
-        return sp.getInt(KEY_AERIAL_INTERVAL, 1440);
+    /** Video rotation cadence in minutes (minimum 5, default a day); 0 is never stored here. */
+    int loadVideoIntervalMin() {
+        return sp.getInt(KEY_VIDEO_INTERVAL, 1440);
     }
 
-    void saveAerialIntervalMin(int minutes) {
-        sp.edit().putInt(KEY_AERIAL_INTERVAL, Math.max(5, Math.min(1440, minutes))).apply();
+    void saveVideoIntervalMin(int minutes) {
+        sp.edit().putInt(KEY_VIDEO_INTERVAL, Math.max(5, Math.min(1440, minutes))).apply();
     }
 
-    /** Epoch ms of the last aerial rotation: the gate for "every N minutes" cadence. */
-    long loadAerialLastAt() {
-        return sp.getLong(KEY_AERIAL_LAST, 0L);
+    /** Epoch ms of the last video rotation: the gate for "every N minutes" cadence. */
+    long loadVideoLastAt() {
+        return sp.getLong(KEY_VIDEO_LAST, 0L);
     }
 
-    void saveAerialLastAt(long t) {
-        sp.edit().putLong(KEY_AERIAL_LAST, t).apply();
+    void saveVideoLastAt(long t) {
+        sp.edit().putLong(KEY_VIDEO_LAST, t).apply();
     }
 
     /** Bing stock rotation (the owner's call: many cached Bing pictures, not just today's). */
@@ -466,7 +466,7 @@ final class PrefsStore {
         sp.edit().putBoolean(KEY_BING_ROTATE, on).apply();
     }
 
-    /** Bing rotation cadence in minutes (minimum 5, default a day); mirrors the aerial keys. */
+    /** Bing rotation cadence in minutes (minimum 5, default a day); mirrors the video keys. */
     int loadBingIntervalMin() {
         return sp.getInt(KEY_BING_INTERVAL, 1440);
     }
@@ -564,11 +564,11 @@ final class PrefsStore {
     }
 
     /**
-     * Aerial sources already pulled into the stills folder (clip URL basenames), so the
+     * Video sources already pulled into the stills folder (clip URL basenames), so the
      * one-tap expander never re-pulls the same clip. Seeded with the six original sources
      * on first read: the first 30 stills came from exactly those clips.
      */
-    java.util.Set<String> loadAerialUsedUrls() {
+    java.util.Set<String> loadVideoUsedUrls() {
         java.util.Set<String> seeded = new java.util.HashSet<>(java.util.Arrays.asList(
                 "SE_A016_C009_SDR_20190717_SDR_2K_AVC.mov",
                 "comp_A013_C012_0122D6_CC_v01_SDR_PS_FINAL_20180709_SDR_2K_AVC.mov",
@@ -576,36 +576,36 @@ final class PrefsStore {
                 "BO_A014_C023_SDR_20190717_F240F3709_SDR_2K_AVC.mov",
                 "comp_GMT060_117NC_363D_1034_AUSTRALIA_v35_SDR_PS_FINAL_20180731_SDR_2K_AVC.mov",
                 "P005_C002_UHD_SDR_2K_AVC.mov"));
-        java.util.Set<String> stored = sp.getStringSet(KEY_AERIAL_USED_URLS, seeded);
+        java.util.Set<String> stored = sp.getStringSet(KEY_VIDEO_USED_URLS, seeded);
         return stored == null || stored.isEmpty() ? seeded : stored;
     }
 
-    void addAerialUsedUrl(String basename) {
-        java.util.Set<String> used = new java.util.HashSet<>(loadAerialUsedUrls());
+    void addVideoUsedUrl(String basename) {
+        java.util.Set<String> used = new java.util.HashSet<>(loadVideoUsedUrls());
         used.add(basename);
-        sp.edit().putStringSet(KEY_AERIAL_USED_URLS, used).apply();
+        sp.edit().putStringSet(KEY_VIDEO_USED_URLS, used).apply();
     }
 
-    /** Aerial still resolution: 0 = follow the display, else force 1080 / 2160. */
-    int loadAerialStillRes() {
-        return sp.getInt(KEY_AERIAL_STILL_RES, 0);
+    /** Video still resolution: 0 = follow the display, else force 1080 / 2160. */
+    int loadVideoStillRes() {
+        return sp.getInt(KEY_VIDEO_STILL_RES, 0);
     }
 
-    void saveAerialStillRes(int res) {
+    void saveVideoStillRes(int res) {
         int v = res == 2160 ? 2160 : res == 1080 ? 1080 : 0;
-        sp.edit().putInt(KEY_AERIAL_STILL_RES, v).apply();
+        sp.edit().putInt(KEY_VIDEO_STILL_RES, v).apply();
     }
 
     /**
-     * Aerial expansion source: "auto" runs the whole chain (bundled → Apple clips → Wallhaven →
+     * Video expansion source: "auto" runs the whole chain (bundled → Apple clips → Wallhaven →
      * 360), the other picks force ONE path — the owner asked for a manual Wallhaven choice.
      */
-    String loadAerialSource() {
-        return sp.getString(KEY_AERIAL_SOURCE, "auto");
+    String loadVideoSource() {
+        return sp.getString(KEY_VIDEO_SOURCE, "auto");
     }
 
-    void saveAerialSource(String source) {
-        sp.edit().putString(KEY_AERIAL_SOURCE, source).apply();
+    void saveVideoSource(String source) {
+        sp.edit().putString(KEY_VIDEO_SOURCE, source).apply();
     }
 
     /** Dock edits live over the config defaults; this drops back to them (settings row). */
@@ -672,7 +672,7 @@ final class PrefsStore {
             json.put("preview_on", sp.getBoolean(KEY_PREVIEW_ON, false));
             json.put("bing_rotate", sp.getBoolean(KEY_BING_ROTATE, false));
             json.put("bing_interval_min", sp.getInt(KEY_BING_INTERVAL, 1440));
-            json.put("aerial_used_urls", new JSONArray(new ArrayList<>(loadAerialUsedUrls())));
+            json.put("video_used_urls", new JSONArray(new ArrayList<>(loadVideoUsedUrls())));
             File out = new File(dir, BACKUP_NAME);
             try (FileOutputStream fo = new FileOutputStream(out)) {
                 fo.write(json.toString(2).getBytes(StandardCharsets.UTF_8));
@@ -726,10 +726,10 @@ final class PrefsStore {
                         .putInt(KEY_BING_INTERVAL, Math.max(5, json.optInt("bing_interval_min", 1440)))
                         .apply();
             }
-            if (json.has("aerial_used_urls")) {
-                List<String> used = readList(json.optJSONArray("aerial_used_urls"));
+            if (json.has("video_used_urls")) {
+                List<String> used = readList(json.optJSONArray("video_used_urls"));
                 if (used != null && !used.isEmpty()) {
-                    sp.edit().putStringSet(KEY_AERIAL_USED_URLS, new HashSet<>(used)).apply();
+                    sp.edit().putStringSet(KEY_VIDEO_USED_URLS, new HashSet<>(used)).apply();
                 }
             }
             return true;

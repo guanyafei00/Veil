@@ -30,7 +30,7 @@ final class Dialogs {
             d.getWindow().setBackgroundDrawable(new ColorDrawable(0xF22A2A31));
         } catch (Exception e) {
             // A dialog with no window (already dismissed) simply keeps the theme default.
-            android.util.Log.d("TvHome", "dialog window styling skipped: " + e);
+            android.util.Log.d("Veil", "dialog window styling skipped: " + e);
         }
     }
 }

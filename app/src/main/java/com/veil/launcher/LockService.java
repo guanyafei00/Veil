@@ -65,7 +65,7 @@ public class LockService extends AccessibilityService {
             }
         } catch (Exception e) {
             // A package query that fails still leaves the settings packages blocked.
-            android.util.Log.w("TvHome", "lock: home list unavailable: " + e);
+            android.util.Log.w("Veil", "lock: home list unavailable: " + e);
         }
         blocked = out;
         blockedAt = now;

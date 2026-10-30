@@ -41,7 +41,7 @@
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"
-        android:theme="@style/Theme.TvHome"
+        android:theme="@style/Theme.Veil"
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:localeConfig="@xml/locales_config">
@@ -90,7 +90,7 @@
         <activity
             android:name=".HomeSettingsActivity"
             android:exported="true"
-            android:theme="@style/Theme.TvHome.Settings"
+            android:theme="@style/Theme.Veil.Settings"
             android:taskAffinity=""
             android:excludeFromRecents="true" />
 
@@ -101,10 +101,10 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:excludeFromRecents="true"
-            android:theme="@style/Theme.TvHome"
+            android:theme="@style/Theme.Veil"
             android:screenOrientation="landscape" />
 
-        <!-- The launcher's own screensaver (idle timeout, aerial stills + Bing picture). Started by
+        <!-- The launcher's own screensaver (idle timeout, video stills + Bing picture). Started by
              the home screen after the chosen idle minutes; never in the app lists or recents. -->
         <activity
             android:name=".ScreensaverActivity"
@@ -141,10 +141,10 @@
             </intent-filter>
         </service>
 
-        <!-- The aerial screensaver (Aerial borrow): streams Apple's aerials, clock fallback. -->
+        <!-- The video screensaver (streaming reuse): streams Apple's videos, clock fallback. -->
         <service
-            android:name=".AerialDream"
-            android:label="@string/dream_aerial"
+            android:name=".VideoDream"
+            android:label="@string/dream_video"
             android:exported="true"
             android:permission="android.permission.BIND_DREAM_SERVICE">
             <intent-filter>

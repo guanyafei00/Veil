@@ -53,8 +53,8 @@ final class Cards {
     static final String CATEGORY = "com.veil.launcher.category.DOCK_CARD";
     static final String META_DATA = "com.veil.launcher.card";
     static final int SPEC_SUPPORTED = 1;
-    /** logcat tag for every rejection: `logcat -s TvHomeCards`. */
-    static final String TAG = "TvHomeCards";
+    /** logcat tag for every rejection: `logcat -s VeilCards`. */
+    static final String TAG = "VeilCards";
 
     // Limits. Declared: cards read per resume. Shown: cards rendered as tiles. Records: decisions remembered.
     static final int MAX_DECLARED = 32;

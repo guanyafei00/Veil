@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A folder of apps on the home grid (inspired by AT4K's folders): a tile that opens a small list of
+ * A folder of apps on the home grid (inspired by reference launcher's folders): a tile that opens a small list of
  * the apps inside it, optionally behind a numeric password so the owner can keep private apps out
  * of sight. The password is a plain 4-digit string kept in SharedPreferences — enough to stop a
  * curious family member, not a security boundary; nothing here touches the network.

@@ -15,7 +15,7 @@ import java.util.Locale;
 /**
  * One wallpaper source's picture pool, seen from the settings panel and the preview gallery.
  * <p>
- * The desktop already rotates three picture sources (the Apple aerial stills, the Bing archive
+ * The desktop already rotates three picture sources (the Apple video stills, the Bing archive
  * and the 360 gallery), each with its own folder, its own index and its own copy-into-the-slot
  * step. The panel could not show them: the owner could not see what was in the pool, could not
  * pick a specific picture, and had no way to say "the next one, please".
@@ -33,7 +33,7 @@ final class WallpaperStock {
 
     /** Which pool this is. The folder name and the index key are derived from it. */
     enum Source {
-        AERIAL("aerials", "aerial"),
+        VIDEO("videos", "video"),
         BING("bing", "bing"),
         W360("w360", "w360");
 
@@ -80,7 +80,7 @@ final class WallpaperStock {
             opts.inSampleSize = sample;
             return BitmapFactory.decodeFile(file.getPath(), opts);
         } catch (Exception | OutOfMemoryError bad) {
-            android.util.Log.w("TvHome", "wallpaper preview failed: " + bad);
+            android.util.Log.w("Veil", "wallpaper preview failed: " + bad);
             return null;
         }
     }
@@ -100,7 +100,7 @@ final class WallpaperStock {
             while ((n = in.read(buf)) > 0) fo.write(buf, 0, n);
             return true;
         } catch (Exception e) {
-            android.util.Log.w("TvHome", "wallpaper apply failed: " + e);
+            android.util.Log.w("Veil", "wallpaper apply failed: " + e);
             return false;
         }
     }
@@ -122,7 +122,7 @@ final class WallpaperStock {
         // The rotation's "last shown" stamp moves too, so a timed rotation does not
         // immediately overwrite the picture the owner just chose.
         markShown(ctx, source, prefs);
-        android.util.Log.d("TvHome", source.label + " next -> " + pick.getName());
+        android.util.Log.d("Veil", source.label + " next -> " + pick.getName());
         return pick;
     }
 
@@ -145,7 +145,7 @@ final class WallpaperStock {
         // Point the index just after the picture now on screen: the next call shows pool[pick+1].
         setIndex(ctx, source, prefs, (pick + 1) % size);
         markShown(ctx, source, prefs);
-        android.util.Log.d("TvHome", source.label + " previous -> " + file.getName());
+        android.util.Log.d("Veil", source.label + " previous -> " + file.getName());
         return file;
     }
 
@@ -165,7 +165,7 @@ final class WallpaperStock {
         PrefsStore prefs = new PrefsStore(ctx);
         setIndex(ctx, source, prefs, (at + 1) % pool.size());
         markShown(ctx, source, prefs);
-        android.util.Log.d("TvHome", source.label + " picked " + picture.getName());
+        android.util.Log.d("Veil", source.label + " picked " + picture.getName());
         return true;
     }
 
@@ -190,7 +190,7 @@ final class WallpaperStock {
     private static int peekIndex(Context ctx, Source source) {
         PrefsStore prefs = new PrefsStore(ctx);
         switch (source) {
-            case AERIAL: return prefs.loadAerialIndex();
+            case VIDEO: return prefs.loadVideoIndex();
             case BING: return prefs.loadBingIndex();
             default: return prefs.loadW360Index();
         }
@@ -199,7 +199,7 @@ final class WallpaperStock {
     /** Stores the pool's next index. */
     private static void setIndex(Context ctx, Source source, PrefsStore prefs, int value) {
         switch (source) {
-            case AERIAL: prefs.saveAerialIndex(value); break;
+            case VIDEO: prefs.saveVideoIndex(value); break;
             case BING: prefs.saveBingIndex(value); break;
             default: prefs.saveW360Index(value); break;
         }
@@ -209,7 +209,7 @@ final class WallpaperStock {
     private static void markShown(Context ctx, Source source, PrefsStore prefs) {
         long now = System.currentTimeMillis();
         switch (source) {
-            case AERIAL: prefs.saveAerialLastAt(now); break;
+            case VIDEO: prefs.saveVideoLastAt(now); break;
             case BING: prefs.saveBingLastAt(now); break;
             default: prefs.saveW360LastAt(now); break;
         }

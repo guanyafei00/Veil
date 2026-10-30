@@ -87,7 +87,7 @@ public class WallpaperGalleryActivity extends Activity {
         String key = getIntent().getStringExtra(EXTRA_SOURCE);
         source = "bing".equals(key) ? WallpaperStock.Source.BING
                 : "w360".equals(key) ? WallpaperStock.Source.W360
-                : WallpaperStock.Source.AERIAL;
+                : WallpaperStock.Source.VIDEO;
 
         preview = findViewById(R.id.galleryPreview);
         title = findViewById(R.id.galleryTitle);
@@ -140,7 +140,7 @@ public class WallpaperGalleryActivity extends Activity {
         switch (s) {
             case BING: return R.string.sec_bing;
             case W360: return R.string.sec_w360;
-            default: return R.string.sec_aerial;
+            default: return R.string.sec_video;
         }
     }
 
