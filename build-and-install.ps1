@@ -42,7 +42,7 @@ if (-not $StockLauncher) {
     if ($LASTEXITCODE -ne 0 -or -not $homePkg) { throw 'could not ask the TV which launcher owns Home; check -TvHost and the debugging prompt, or pass -StockLauncher <package>' }
     $homePkg = "$homePkg".Trim().Split('/')[0]
     if ($knownStock -contains $homePkg) { $StockLauncher = $homePkg }
-    elseif ($homePkg -eq 'com.gathin.tvhome') { $StockLauncher = 'none'; Write-Host 'Home already belongs to this launcher; nothing will be disabled.' }
+    elseif ($homePkg -eq 'com.veil.launcher') { $StockLauncher = 'none'; Write-Host 'Home already belongs to this launcher; nothing will be disabled.' }
     else { throw "Home currently resolves to '$homePkg', which is not a stock launcher this script knows (android = launcher chooser, com.google.android.tungsten.setupwraith = setup wizard, see README Troubleshooting; anything else = another launcher is the default). Run again with -StockLauncher <package to disable> or -StockLauncher none." }
 }
 Write-Host "Stock launcher: $StockLauncher"
@@ -57,27 +57,27 @@ $out = & $py -I ..\tools\tv.py 'pm install -r /data/local/tmp/tvhome.apk; rm -f 
 Write-Host $out
 if ("$out" -notmatch 'Success') { throw 'pm install failed; the stock launcher was left untouched' }
 # Android 9 only accepts a component here; Android 10+ also takes a bare package name.
-$out = & $py -I ..\tools\tv.py 'cmd package set-home-activity --user 0 com.gathin.tvhome/.MainActivity'
+$out = & $py -I ..\tools\tv.py 'cmd package set-home-activity --user 0 com.veil.launcher/.MainActivity'
 Write-Host $out
 if ("$out" -match 'Error') { throw 'could not set the new launcher as home; the stock launcher was left untouched' }
 @(
-    'pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted',
-    'cmd package compile -m speed -f com.gathin.tvhome',
-    "am start -W -n com.gathin.tvhome/.MainActivity | grep -E '^(Status|Error)'",
+    'pm grant com.veil.launcher android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted',
+    'cmd package compile -m speed -f com.veil.launcher',
+    "am start -W -n com.veil.launcher/.MainActivity | grep -E '^(Status|Error)'",
     $disableStock,
-    'cmd package set-home-activity --user 0 com.gathin.tvhome/.MainActivity'
+    'cmd package set-home-activity --user 0 com.veil.launcher/.MainActivity'
 ) | & $py -I ..\tools\tv.py --batch
 # Order matters, see build-and-install.sh: start the new launcher, disable the stock one, set the
 # preference last, then check where Home ended up and put the stock launcher back if it is not ours.
 $homeNow = (& $py -I ..\tools\tv.py 'cmd package resolve-activity --brief -c android.intent.category.HOME -a android.intent.action.MAIN' | Select-Object -Last 1).Trim()
-if ($homeNow -notlike 'com.gathin.tvhome/*') {
+if ($homeNow -notlike 'com.veil.launcher/*') {
     if ($StockLauncher -ne 'none') { & $py -I ..\tools\tv.py "pm enable --user 0 $StockLauncher" | Out-Null }
     throw "Home resolves to '$homeNow', not to the new launcher; $StockLauncher was re-enabled. On Google TV this usually means com.google.android.tungsten.setupwraith also claims Home: add it to your debloat list (see README, Troubleshooting), apply it, then run this script again."
 }
 Write-Host "Home now resolves to $homeNow"
 # Optional accessibility services, appended to enabled_accessibility_services without dropping others.
 function Enable-Service([string]$Name) {
-    $svc = "com.gathin.tvhome/.$Name"
+    $svc = "com.veil.launcher/.$Name"
     & $py -I ..\tools\tv.py ('s=$(settings get secure enabled_accessibility_services); case "$s" in *' + $Name + '*) ;; null|"") settings put secure enabled_accessibility_services ' + $svc + ' ;; *) settings put secure enabled_accessibility_services "$s:' + $svc + '" ;; esac; settings put secure accessibility_enabled 1; echo ' + $Name + ' enabled')
 }
 if ($InputKeyService) { Enable-Service 'InputKeyService' }
