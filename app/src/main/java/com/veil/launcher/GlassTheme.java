@@ -21,7 +21,18 @@ final class GlassTheme {
 
     /** 7:00–18:00 counts as day; anything else is night glass. */
     static boolean isNight() {
-        int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        return h >= 18 || h < 7;
+        // Called from the dock's per-frame draw (the breathing wallpaper invalidates the
+        // desktop continuously). Calendar.getInstance() allocates on EVERY call — constant
+        // GC churn read as jank on 1–2 GB boxes — so the hour is cached for 30 s instead.
+        long now = System.currentTimeMillis();
+        if (now - checkedAt > 30_000) {
+            checkedAt = now;
+            int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+            cachedNight = h >= 18 || h < 7;
+        }
+        return cachedNight;
     }
+
+    private static long checkedAt;
+    private static boolean cachedNight = true;
 }

@@ -55,6 +55,9 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     private int frostW = -1, frostH = -1;
     /** The mood the cached frost was rendered in: a clock flip must re-render (day ↔ night). */
     private boolean frostNight = GlassTheme.isNight();
+    /** The shader for the current frost bitmap, rebuilt only when the bitmap object changes. */
+    private android.graphics.BitmapShader frostShader;
+    private Bitmap frostShaderFor;
     /** The dock frosted glass switch (owner's panel toggle): off falls back to the dark gradient. */
     private boolean frostEnabled = true;
     /** The last frost render failed (OOM): stop retrying per frame until the inputs change. */
@@ -178,16 +181,19 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
                 int[] loc = new int[2];
                 parent.getLocationOnScreen(loc);
                 int w = Math.round(rect.width()), h = Math.round(rect.height());
-                // 2-px quantisation: sub-pixel scroll jitter must not re-trigger the blur.
-                int gx = (loc[0] + Math.round(rect.left)) & ~1;
-                int gy = (loc[1] + Math.round(rect.top)) & ~1;
+                // 8-px quantisation: sub-pixel scroll jitter must not re-trigger the blur, and
+                // the blur radius already spans ~20 screen px, so an 8-px source shift inside
+                // the glass is invisible — this alone cuts scroll-time re-renders ~4x.
+                int gx = (loc[0] + Math.round(rect.left)) & ~7;
+                int gy = (loc[1] + Math.round(rect.top)) & ~7;
                 if (frost == null || w != frostW || h != frostH || gx != frostX || gy != frostY
                         || GlassTheme.isNight() != frostNight) {
                     android.util.DisplayMetrics dm = parent.getResources().getDisplayMetrics();
                     Bitmap nf = FrostGlass.renderRegion(wallpaper,
                             dm.widthPixels, dm.heightPixels, gx, gy, w, h);
                     if (nf != null) {
-                        if (frost != null) frost.recycle();
+                        // No recycle: the returned bitmap is FrostGlass's reused buffer, and it
+                        // may BE the current frost (same-size render overwrites it in place).
                         frost = nf;
                         frostX = gx; frostY = gy; frostW = w; frostH = h;
                         frostNight = GlassTheme.isNight();
@@ -201,12 +207,18 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             }
             if (frost != null) {
                 applyBandAlpha();
-                android.graphics.BitmapShader sh = new android.graphics.BitmapShader(
-                        frost, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-                android.graphics.Matrix m = new android.graphics.Matrix();
-                m.setScale(3f, 3f);   // the glass is 1/3 resolution: stretch it back over the band
-                sh.setLocalMatrix(m);
-                bandBitmap.setShader(sh);
+                // The shader is rebuilt only when the frost bitmap OBJECT changes (a size or
+                // mood re-render); same-object content updates flow through automatically —
+                // and rebuilding it every draw allocated Shader+Matrix churn per frame.
+                if (frostShaderFor != frost) {
+                    frostShader = new android.graphics.BitmapShader(
+                            frost, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+                    android.graphics.Matrix m = new android.graphics.Matrix();
+                    m.setScale(4f, 4f);   // the glass is 1/4 resolution: stretch it over the band
+                    frostShader.setLocalMatrix(m);
+                    bandBitmap.setShader(frostShader);
+                    frostShaderFor = frost;
+                }
                 c.drawRoundRect(rect, radius, radius, bandBitmap);
                 // No grain here: the frost already feather-fades at its edges (FrostGlass),
                 // and a full-rect grain overlay would paint hard noise right over the fade.

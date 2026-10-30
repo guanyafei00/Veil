@@ -39,7 +39,8 @@ final class FrostGlass {
             if (cw < 4 || ch < 4) return null;
 
             int halfW = Math.max(2, cw / 2), halfH = Math.max(2, ch / 2);
-            Bitmap out = finishGlass(cropScaled(wallpaper, srcL, srcT, srcR, srcB, halfW, halfH), 6, 4);
+            Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.ARGB_8888);
+            finishGlass(cropScaled(wallpaper, srcL, srcT, srcR, srcB, halfW, halfH), out, 6, 4);
             return out;
         } catch (Exception | OutOfMemoryError e) {
             // A wallpaper too big to crop (or OOM): the caller falls back to the painted gradient.
@@ -50,11 +51,11 @@ final class FrostGlass {
 
     /**
      * Renders the frosted glass for a dock REGION at screen position (x, y), size w x h —
-     * REAL-TIME per frame (the owner's ask: the glass must always show the wallpaper right
-     * under the dock, in every position). The region is small, so this is cheap: a 1/3-scale
-     * crop of just the band's wallpaper area, blurred in two passes. Continuous movement then
-     * produces continuous content — no settle-time brightness jump (v1's flicker), no stale
-     * print (v2's), no frozen sheet ignoring the wallpaper's own breathing zoom (v3's).
+     * REAL-TIME while the dock moves (the owner's ask: the glass must always show the wallpaper
+     * right under the dock). The region is small, so this is cheap: a 1/4-scale crop of just the
+     * band's wallpaper area, blurred in two passes. Every scratch buffer (crop, blur pixels,
+     * output) is REUSED across renders — the desktop redraws every frame because of the breathing
+     * wallpaper, and per-frame bitmap allocations read as GC jank on 1–2 GB boxes.
      */
     static Bitmap renderRegion(Bitmap wallpaper, int viewW, int viewH, int x, int y, int w, int h) {
         if (wallpaper == null || w <= 0 || h <= 0 || viewW <= 0 || viewH <= 0) return null;
@@ -68,38 +69,58 @@ final class FrostGlass {
             int srcB = Math.min(wallH, Math.round((y + h + offY) / scale));
             int cw = srcR - srcL, ch = srcB - srcT;
             if (cw < 4 || ch < 4) return null;
-            int outW = Math.max(2, w / 3), outH = Math.max(2, h / 3);
+            int outW = Math.max(2, w / 4), outH = Math.max(2, h / 4);
             Bitmap cropped = cropScaled(wallpaper, srcL, srcT, srcR, srcB, outW, outH);
-            // Blur radii scaled for the 1/3 resolution (5+3 here reads like 6+4 at half res).
-            return finishGlass(cropped, 5, 3);
+            Bitmap out = obtainRegionBuffer(outW, outH);
+            // Blur radii scaled for the 1/4 resolution (3+2 here reads like 6+4 at half res).
+            finishGlass(cropped, out, 3, 2);
+            return out;
         } catch (Exception | OutOfMemoryError e) {
             android.util.Log.w("TvHome", "frost region render failed: " + e);
             return null;
         }
     }
 
+    /** Reusable render targets: same-size requests reuse the bitmap, zero per-frame allocation. */
+    private static Bitmap cropBuffer;    // RGB_565 crop target
+    private static int[] pxBuffer;       // pixel scratch for the blurs
+    private static int[] tmpBuffer;      // box-blur swap line
+    private static Bitmap regionBuffer;  // ARGB_8888 output (feathered alpha edges)
+
+    private static Bitmap obtainRegionBuffer(int w, int h) {
+        if (regionBuffer == null || regionBuffer.isRecycled()
+                || regionBuffer.getWidth() != w || regionBuffer.getHeight() != h) {
+            regionBuffer = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        }
+        return regionBuffer;
+    }
+
     /** CENTER_CROP-maps wallpaper region [srcL,T,R,B] into a halfW x halfH RGB_565 bitmap. */
     private static Bitmap cropScaled(Bitmap wallpaper, int srcL, int srcT, int srcR, int srcB,
                                      int halfW, int halfH) {
-        Bitmap cropped = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
-        Canvas c = new Canvas(cropped);
+        if (cropBuffer == null || cropBuffer.isRecycled()
+                || cropBuffer.getWidth() != halfW || cropBuffer.getHeight() != halfH) {
+            cropBuffer = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.RGB_565);
+        }
+        Canvas c = new Canvas(cropBuffer);
         c.drawBitmap(wallpaper,
                 new Rect(srcL, srcT, srcR, srcB),
                 new Rect(0, 0, halfW, halfH), null);
-        return cropped;
+        return cropBuffer;
     }
 
-    /** Two box-blur passes + the mood veil + feathered edges; consumes {@code cropped}. */
-    private static Bitmap finishGlass(Bitmap cropped, int radius1, int radius2) {
+    /** Two box-blur passes + the mood veil + feathered edges, written into {@code out}. */
+    private static void finishGlass(Bitmap cropped, Bitmap out, int radius1, int radius2) {
         int halfW = cropped.getWidth(), halfH = cropped.getHeight();
-        int[] px = new int[halfW * halfH];
-        cropped.getPixels(px, 0, halfW, 0, 0, halfW, halfH);
-        px = boxBlur(px, halfW, halfH, radius1);
-        px = boxBlur(px, halfW, halfH, radius2);
-        cropped.setPixels(px, 0, halfW, 0, 0, halfW, halfH);
+        if (pxBuffer == null || pxBuffer.length != halfW * halfH) {
+            pxBuffer = new int[halfW * halfH];
+            tmpBuffer = new int[halfW * halfH];
+        }
+        cropped.getPixels(pxBuffer, 0, halfW, 0, 0, halfW, halfH);
+        pxBuffer = boxBlur(pxBuffer, halfW, halfH, radius1);
+        pxBuffer = boxBlur(pxBuffer, halfW, halfH, radius2);
+        cropped.setPixels(pxBuffer, 0, halfW, 0, 0, halfW, halfH);
 
-        // ARGB_8888, not RGB_565: the feathered edges below need a real alpha channel.
-        Bitmap out = Bitmap.createBitmap(halfW, halfH, Bitmap.Config.ARGB_8888);
         Canvas oc = new Canvas(out);
         Paint content = new Paint(Paint.ANTI_ALIAS_FLAG);
         if (!GlassTheme.isNight()) {
@@ -110,7 +131,8 @@ final class FrostGlass {
             content.setColorFilter(new android.graphics.ColorMatrixColorFilter(cm));
         }
         oc.drawBitmap(cropped, 0, 0, content);
-        cropped.recycle();
+        // cropped is the shared cropBuffer: cropScaled overwrites it fully next render,
+        // so it is neither recycled nor cleared here.
 
         // Mood veil: at night a dark scrim keeps white text readable; in daylight the band
         // turns milky bright instead — sunlit frosted glass rather than a smoked slab. A
@@ -133,13 +155,13 @@ final class FrostGlass {
                 0x00000000, 0xFF000000, 0xFF000000, 0x00000000}, new float[]{
                 0f, fade / halfH, 1f - fade / halfH, 1f}, android.graphics.Shader.TileMode.CLAMP));
         oc.drawRect(0, 0, halfW, halfH, mask);
-        return out;
     }
 
     /** In-place separable box blur (sliding window, O(n) per pass). */
     private static int[] boxBlur(int[] px, int w, int h, int radius) {
         if (w < 3 || h < 3) return px;
-        int[] tmp = new int[px.length];
+        if (tmpBuffer == null || tmpBuffer.length != px.length) tmpBuffer = new int[px.length];
+        int[] tmp = tmpBuffer;
         int win = radius * 2 + 1;
         // horizontal
         for (int y = 0; y < h; y++) {
