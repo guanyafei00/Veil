@@ -8,14 +8,24 @@ tvOS 风格的 Android TV / 盒子桌面（launcher），干净、轻量、纯�
 
 | 安装包 | 体积 | 说明 |
 | --- | --- | --- |
-| [Veil-TV-v2.1.4-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.4/Veil-TV-v2.1.4-full.apk) | 1.2 MB | 含较大兜底背景图；所有壁纸（航拍视频 / 必应 / 360）均在线拉取，安装包内零预置壁纸图 |
-| [Veil-TV-v2.1.4-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.4/Veil-TV-v2.1.4-lite.apk) | 0.59 MB | 兜底图更小；功能与 full 完全一致，壁纸同样全在线 |
+| [Veil-TV-v2.1.5-full.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.5/Veil-TV-v2.1.5-full.apk) | 1.2 MB | 含较大兜底背景图；所有壁纸（航拍视频 / 必应 / 360）均在线拉取，安装包内零预置壁纸图 |
+| [Veil-TV-v2.1.5-lite.apk](https://github.com/guanyafei00/Veil/releases/download/v2.1.5/Veil-TV-v2.1.5-lite.apk) | 0.59 MB | 兜底图更小；功能与 full 完全一致，壁纸同样全在线 |
 
 ```bash
-adb install -r Veil-TV-v2.1.4-lite.apk
+adb install -r Veil-TV-v2.1.5-lite.apk
 ```
 
 两个包包名相同（`com.veil.launcher`），可互相覆盖安装。安装后在系统设置里把 Veil 设为默认桌面。
+
+### v2.1.5：设置面板重排 + 玻璃瑕疵修复 + 流畅度优化
+
+这版集中处理实机反馈的三类问题：
+
+- **「系统设置」打不开的兜底**：部分 ROM 不响应标准的 `android.settings.SETTINGS`，点了只弹「不可用」。现在先试标准 action，失败后自动查找设备上能响应的设置应用直接启动，再不行回退 `com.android.settings` / `com.android.tv.settings` 主界面，全部失败才提示。
+- **设置面板重排**：顶部分类「系统」改名「设置」；子面板里把跳转 Android 系统设置的「系统设置」单独置顶，下面分隔线 + 「Veil」分组，其余全是 Veil 自身的各项设置，层次不再混淆。
+- **玻璃渲染瑕疵（实拍照片反馈）**：顶栏药丸的高光层缺圆角，方角从药丸弧线外露出——已补齐；dock 磨砂带上下边缘原本是 100%→0 的硬切线，横切壁纸——改为羽化渐隐，玻璃融进场景；白天模式轻微降饱和，暖色壁纸上不再发黄发闷。
+- **流畅度**：消除桌面每帧重绘路径上的持续内存分配（昼夜判断缓存、玻璃渲染全缓冲复用、着色器缓存、重渲染触发步进 2px→8px），低内存盒子上不再因频繁 GC 掉帧。
+- 版本号 215 → 216，版本名 2.1.5；full / lite 双包构建通过，已在斐讯 T1（Android 7.1.2）实机验证。
 
 ### v2.1.4：白天 / 夜晚双玻璃模式
 
