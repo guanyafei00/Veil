@@ -153,6 +153,17 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
             float t = child.getTop() + card.getTop() + child.getTranslationY();
             float r = l + card.getWidth();
             float b = t + card.getHeight();
+            // The focused tile zooms via scaleX/Y, which does NOT show up in layout bounds —
+            // the enlarged banner used to poke out past the glass (the owner's TV photo: the
+            // band edge cutting across the zoomed 当贝市场 tile). Wrap the VISUAL bounds
+            // instead: the band follows the zoom animation frame by frame and always keeps
+            // the tile inside the glass.
+            float sx = card.getScaleX(), sy = card.getScaleY();
+            if (sx != 1f || sy != 1f) {
+                float cx = (l + r) / 2f, cy = (t + b) / 2f;
+                float hw = card.getWidth() / 2f * sx, hh = card.getHeight() / 2f * sy;
+                l = cx - hw; r = cx + hw; t = cy - hh; b = cy + hh;
+            }
             if (!any) {
                 rect.set(l, t, r, b);
                 any = true;
