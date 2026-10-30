@@ -139,6 +139,10 @@ final class AerialWallpaperPlayer implements SurfaceHolder.Callback {
 
     /** Begin (or resume) playback. No-op when there are no clips or already active. */
     void start() {
+        // INFO on purpose: some OEM builds (TCL) drop Debug-level app logs, and this is the
+        // exact decision tree we need to see when the video "silently" stays black.
+        android.util.Log.i("TvHome", "aerial start(): clips=" + clips.size()
+                + " surfaceReady=" + surfaceReady + " stopped=" + stopped + " playing=" + playing);
         if (clips.isEmpty()) return;
         boolean wasStopped = stopped;
         stopped = false;
@@ -175,6 +179,7 @@ final class AerialWallpaperPlayer implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceCreated(SurfaceHolder h) {
+        android.util.Log.i("TvHome", "aerial surfaceCreated, stopped=" + stopped);
         surfaceReady = true;
         if (!stopped) playRandom();
     }

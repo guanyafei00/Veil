@@ -1079,7 +1079,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     private void updateAerialVideo() {
         if (aerialVideo == null) return;
-        if ("video".equals(prefs.loadAerialSource())) {
+        String src = prefs.loadAerialSource();
+        android.util.Log.i("TvHome", "aerial gate: source=" + src + " active=" + aerialVideo.isActive());
+        if ("video".equals(src)) {
             if (!aerialVideo.isActive()) aerialVideo.start();
         } else {
             aerialVideo.stop();
