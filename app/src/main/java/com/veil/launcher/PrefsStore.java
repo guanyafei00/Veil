@@ -110,6 +110,12 @@ final class PrefsStore {
      * rest or waits pure-wallpaper for a Down press.
      */
     private static final String KEY_DOCK_BAR = "dock_bar_on";
+    /** In-app update: the hosted manifest URL (empty = use the build-time default). */
+    private static final String KEY_UPDATE_URL = "update_url";
+    /** Whether to silently check for an update on launch (once a day at most). */
+    private static final String KEY_UPDATE_AUTO = "update_auto";
+    /** Epoch ms of the last auto update check, for the once-a-day rate limit. */
+    private static final String KEY_UPDATE_LAST = "update_last_check";
     private static final String BACKUP_NAME = "veil-backup.json";
 
     private final SharedPreferences sp;
@@ -650,6 +656,35 @@ final class PrefsStore {
 
     void setDockBarOn(boolean on) {
         sp.edit().putBoolean(KEY_DOCK_BAR, on).apply();
+    }
+
+    // ---- in-app update --------------------------------------------------------------------------
+
+    /** The hosted manifest URL; empty means fall back to the build-time default. */
+    String loadUpdateUrl() {
+        return sp.getString(KEY_UPDATE_URL, "");
+    }
+
+    void saveUpdateUrl(String url) {
+        sp.edit().putString(KEY_UPDATE_URL, url).apply();
+    }
+
+    /** Auto-check for updates on launch, once a day at most; on by default. */
+    boolean isUpdateAuto() {
+        return sp.getBoolean(KEY_UPDATE_AUTO, true);
+    }
+
+    void setUpdateAuto(boolean on) {
+        sp.edit().putBoolean(KEY_UPDATE_AUTO, on).apply();
+    }
+
+    /** Epoch ms of the last auto update check (rate-limits the once-a-day launch check). */
+    long loadUpdateLastCheck() {
+        return sp.getLong(KEY_UPDATE_LAST, 0L);
+    }
+
+    void saveUpdateLastCheck(long t) {
+        sp.edit().putLong(KEY_UPDATE_LAST, t).apply();
     }
 
     /** Writes the current layout to the app's external files folder, or null when that is unavailable. */

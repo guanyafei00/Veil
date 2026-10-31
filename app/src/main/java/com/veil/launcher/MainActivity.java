@@ -1506,6 +1506,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         VideoEngine.INSTANCE.init(this);
         VideoEngine.INSTANCE.useDesktop();
         updateWallpaperVideo();
+        // Silent, once-a-day update check on launch (no prompt unless a newer version exists).
+        Updater.maybeAutoCheck(this);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
             registerReceiver(netCheckReceiver, netCheckFilter, Context.RECEIVER_NOT_EXPORTED);

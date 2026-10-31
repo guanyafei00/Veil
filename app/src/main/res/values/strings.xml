@@ -288,4 +288,23 @@
     <string name="control_done">Sent via local adb</string>
     <string name="control_fail">Could not reach the debug port (5555). Enable network adb first.</string>
     <string name="control_waiting">Waiting for authorisation… check the screen and choose Allow</string>
+
+    <!-- In-app update check + self-update. -->
+    <string name="section_update">Update</string>
+    <string name="check_update">Check for update</string>
+    <string name="update_auto">Auto-check on launch</string>
+    <string name="update_url">Update server address</string>
+    <string name="update_checking">Checking for update…</string>
+    <string name="update_latest">Up to date (v%1$s)</string>
+    <string name="update_available">New version found</string>
+    <string name="update_available_msg">v%1$s is available (current v%2$s)\n\n%3$s</string>
+    <string name="update_now">Update now</string>
+    <string name="update_later">Later</string>
+    <string name="update_downloading">Downloading update (%1$d%%)</string>
+    <string name="update_download_failed">Download failed: %1$s</string>
+    <string name="update_no_url">No update server configured. Set it under Settings → Veil → Update server address.</string>
+    <string name="update_check_failed">Update check failed: %1$s</string>
+    <string name="update_url_hint">https://…/update.json</string>
+    <string name="update_url_saved">Update address saved</string>
+    <string name="update_url_invalid">Address must start with http:// or https://</string>
 </resources>

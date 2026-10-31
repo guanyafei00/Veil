@@ -1,0 +1,9 @@
+{
+  "versionCode": 218,
+  "versionName": "2.1.7",
+  "apkUrl": "https://example.com/Veil-TV-full-debug.apk",
+  "apkUrlFull": "https://example.com/Veil-TV-full-debug.apk",
+  "apkUrlLite": "https://example.com/Veil-TV-lite-debug.apk",
+  "notes": "Bug fixes and a new in-app updater.",
+  "mandatory": false
+}

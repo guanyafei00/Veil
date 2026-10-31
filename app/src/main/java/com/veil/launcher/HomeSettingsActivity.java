@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
@@ -71,6 +72,8 @@ public class HomeSettingsActivity extends Activity {
             dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
             topBarColorValue, topTextColorValue,
             screensaverValue, screensaverDelayValue, screensaverClockValue, previewValue;
+    /** Update rows: the installed version, the auto-check toggle, and the manifest URL. */
+    private TextView checkUpdateValue, updateAutoValue, updateUrlValue;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -500,6 +503,14 @@ public class HomeSettingsActivity extends Activity {
         // The row's value shows whether this desktop IS the default home right now.
         row(getString(R.string.system_home), systemHomeValue = new TextView(this), v -> systemHome());
         row(getString(R.string.panel_about), null, v -> showStorageInfo());
+        // In-app update: check now, toggle auto-check on launch, and configure the manifest URL.
+        sectionHeader(getString(R.string.section_update));
+        checkUpdateValue = new TextView(this);
+        row(getString(R.string.check_update), checkUpdateValue, v -> Updater.check(this, true));
+        updateAutoValue = new TextView(this);
+        row(getString(R.string.update_auto), updateAutoValue, v -> toggleUpdateAuto());
+        updateUrlValue = new TextView(this);
+        row(getString(R.string.update_url), updateUrlValue, v -> setUpdateUrl());
     }
 
     /** A thin separator line between the standalone system-settings item and Veil's own rows. */
@@ -646,6 +657,10 @@ public class HomeSettingsActivity extends Activity {
                 prefs.loadScreensaverDelayMin()));
         set(screensaverClockValue, prefs.isScreensaverClockOn() ? "开" : "关");
         set(previewValue, prefs.isPreviewOn() ? "开" : "关");
+        set(checkUpdateValue, versionLine());
+        set(updateAutoValue, prefs.isUpdateAuto() ? "开" : "关");
+        String u = prefs.loadUpdateUrl();
+        set(updateUrlValue, (u == null || u.isEmpty()) ? "—" : hostOf(u));
     }
 
     /** Null-safe setText: a row of another category was never built, or its view was recycled. */
@@ -1581,5 +1596,65 @@ public class HomeSettingsActivity extends Activity {
 
     private static String gb(long bytes) {
         return String.format(java.util.Locale.getDefault(), "%.1f GB", bytes / 1073741824.0);
+    }
+
+    /** Toggles the once-a-day launch update check. */
+    private void toggleUpdateAuto() {
+        boolean on = !prefs.isUpdateAuto();
+        prefs.setUpdateAuto(on);
+        refreshValues();
+        Toast.makeText(this, on ? "Auto-check on launch enabled" : "Auto-check on launch disabled",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    /** Lets the owner paste the hosted manifest URL (the update server). */
+    private void setUpdateUrl() {
+        final EditText input = new EditText(this);
+        input.setSingleLine();
+        input.setText(prefs.loadUpdateUrl());
+        input.setHint(R.string.update_url_hint);
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
+                .setTitle(R.string.update_url)
+                .setView(input)
+                .setPositiveButton(android.R.string.ok, (d, w) -> {
+                    String s = normalizeUrl(input.getText().toString().trim());
+                    if (s.isEmpty() || s.startsWith("http://") || s.startsWith("https://")) {
+                        prefs.saveUpdateUrl(s);
+                        refreshValues();
+                        Toast.makeText(this, R.string.update_url_saved, Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, R.string.update_url_invalid, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create());
+    }
+
+    /** Extracts the host from a URL for the settings row, falling back to the raw string. */
+    private static String hostOf(String url) {
+        try {
+            return Uri.parse(url).getHost();
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
+    /**
+     * TV IMEs (the T1's Chinese keyboard included) type full-width punctuation — ：／。 — which
+     * makes every URL invalid. Maps the full-width ASCII block (and the Chinese full stop) back
+     * to their ASCII selves before the address is validated or saved.
+     */
+    private static String normalizeUrl(String url) {
+        if (url == null) return "";
+        StringBuilder b = new StringBuilder(url.length());
+        for (int i = 0; i < url.length(); i++) {
+            char c = url.charAt(i);
+            if (c >= 0xFF01 && c <= 0xFF5E) c = (char) (c - 0xFEE0);
+            else if (c == '。') c = '.';
+            else if (c == '、') c = ',';
+            else if (c == '　') c = ' ';
+            b.append(c);
+        }
+        return b.toString();
     }
 }
