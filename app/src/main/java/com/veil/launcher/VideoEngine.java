@@ -8,10 +8,20 @@ import android.view.SurfaceHolder;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Writer;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -23,6 +33,12 @@ import java.util.Random;
  * flows continuously from desktop to screensaver and back, at a single decode (one stream of
  * CDN traffic, not two). Only one surface is attached at a time; the idle side simply isn't
  * rendered while the player keeps decoding, which is what makes the hand-off instant.
+ * <p>
+ * The clip list is never hard-written to a fixed size: we ship a bundled fallback playlist
+ * (assets/videos.json — Apple's public Aerial CDN URLs), and on every launch we best-effort
+ * fetch Apple's live manifest so the catalog auto-updates to whatever Apple currently publishes.
+ * If the live fetch is unreachable (e.g. mainland-China CDN trouble) we quietly keep the bundled
+ * list, so video never breaks.
  */
 final class VideoEngine {
 
@@ -34,6 +50,19 @@ final class VideoEngine {
     private static final long RETRY_MS = 30_000L;
     /** How often we sample the playback position for diagnostics. */
     private static final long POSITION_TICK_MS = 5_000L;
+    /** Network timeouts for the live catalog fetch. */
+    private static final int FETCH_TIMEOUT_MS = 8_000;
+
+    /**
+     * Candidate Apple manifest URLs, tried in order. Apple has moved this endpoint at least twice
+     * (V1 -> V2 -> itunes-assets), so we keep a list and take the first that answers. The legacy
+     * /Aerials/2x/master.json is the historical one; add newer endpoints here as they appear.
+     * Verified-on-device is required — see logcat tag "Veil" ("catalog auto-updated" vs
+     * "using bundled playlist").
+     */
+    private static final String[] MANIFEST_URLS = {
+            "https://sylvan.apple.com/Aerials/2x/master.json"
+    };
 
     /**
      * The active surface's UI hook. {@code onPlayingChanged(true)} means a frame is on screen —
@@ -52,8 +81,10 @@ final class VideoEngine {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
     private final List<Clip> clips = new ArrayList<>();
+    private final Object clipsLock = new Object();
 
     private Context ctx;
+    private File catalogCache;
     private MediaPlayer player;
     private SurfaceHolder desktopHolder, dreamHolder;
     private Listener desktopListener, dreamListener;
@@ -70,11 +101,14 @@ final class VideoEngine {
 
     // ---- setup ----
 
-    /** Loads the playlist once, from the first context we see. */
+    /** Loads the playlist once, from the first context we see, then best-effort refreshes it. */
     void init(Context ctx) {
         if (this.ctx != null) return;
         this.ctx = ctx.getApplicationContext();
-        loadPlaylist();
+        loadPlaylist();   // bundled fallback (Apple's public Aerial CDN URLs)
+        catalogCache = new File(this.ctx.getCacheDir(), "veil_catalog.json");
+        loadCachedCatalog();   // if we fetched a live list before, reuse it offline
+        refreshCatalogAsync(); // try to auto-update to Apple's current catalog right now
     }
 
     private void loadPlaylist() {
@@ -85,15 +119,183 @@ final class VideoEngine {
             int n;
             while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
             JSONArray a = new JSONArray(new String(bo.toByteArray(), StandardCharsets.UTF_8));
-            for (int i = 0; i < a.length(); i++) {
-                JSONObject o = a.optJSONObject(i);
-                if (o == null) continue;
-                String url = o.optString("url", "");
-                if (!url.isEmpty()) clips.add(new Clip(o.optString("name", ""), url));
+            synchronized (clipsLock) {
+                for (int i = 0; i < a.length(); i++) {
+                    JSONObject o = a.optJSONObject(i);
+                    if (o == null) continue;
+                    String url = o.optString("url", "");
+                    if (!url.isEmpty()) clips.add(new Clip(o.optString("name", ""), url));
+                }
             }
         } catch (Exception e) {
             // A missing or broken playlist just means no video (the still / clock stays).
             android.util.Log.w("Veil", "video playlist unreadable: " + e);
+        }
+    }
+
+    // ---- live catalog refresh (auto-update) ----
+
+    /** Fetches Apple's current manifest off the main thread; adopts it if it parses. */
+    private void refreshCatalogAsync() {
+        if (ctx == null) return;
+        new Thread(() -> {
+            for (String base : MANIFEST_URLS) {
+                try {
+                    String s = fetchText(base);
+                    if (s == null) continue;
+                    List<Clip> live = parseAppleManifest(s);
+                    if (live != null && !live.isEmpty()) {
+                        synchronized (clipsLock) {
+                            clips.clear();
+                            clips.addAll(live);
+                        }
+                        persistCache(live);
+                        android.util.Log.i("Veil", "catalog auto-updated from " + base
+                                + ": " + live.size() + " clips");
+                        return;
+                    }
+                } catch (Exception e) {
+                    android.util.Log.w("Veil", "catalog fetch failed for " + base + ": " + e);
+                }
+            }
+            android.util.Log.i("Veil", "catalog: using bundled playlist (live fetch unavailable)");
+        }).start();
+    }
+
+    /** Parses Apple's manifest into clips. Handles a bare array, or a resources->items tree. */
+    private List<Clip> parseAppleManifest(String s) throws Exception {
+        List<Clip> out = new ArrayList<>();
+        Object root = new JSONTokener(s).nextValue();
+        if (root instanceof JSONArray) {
+            JSONArray arr = (JSONArray) root;
+            for (int i = 0; i < arr.length(); i++) collectClip(arr.optJSONObject(i), out);
+        } else if (root instanceof JSONObject) {
+            JSONObject obj = (JSONObject) root;
+            JSONArray res = obj.optJSONArray("resources");
+            if (res != null) {
+                int cap = Math.min(res.length(), 60);   // bound nested fetches
+                for (int i = 0; i < cap; i++) {
+                    JSONObject r = res.optJSONObject(i);
+                    if (r == null) continue;
+                    String ru = r.optString("url", "");
+                    if (ru.isEmpty()) continue;
+                    try {
+                        String sub = fetchText(ru);
+                        if (sub == null) continue;
+                        Object subRoot = new JSONTokener(sub).nextValue();
+                        if (subRoot instanceof JSONObject) {
+                            collectItems(((JSONObject) subRoot).optJSONArray("items"), out);
+                            collectAssets(((JSONObject) subRoot).optJSONObject("assets"), out);
+                        }
+                    } catch (Exception ignore) {
+                        // one bad resource shouldn't sink the whole catalog
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private void collectItems(JSONArray items, List<Clip> out) {
+        if (items == null) return;
+        for (int i = 0; i < items.length(); i++) collectClip(items.optJSONObject(i), out);
+    }
+
+    private void collectAssets(JSONObject assets, List<Clip> out) {
+        if (assets == null) return;
+        for (int i = 0; i < assets.length(); i++) {
+            Object v = assets.opt(assets.names().optString(i));
+            if (v instanceof JSONObject) collectClip((JSONObject) v, out);
+        }
+    }
+
+    /** Pulls name + url out of a clip-shaped object using the various keys Apple uses. */
+    private void collectClip(JSONObject o, List<Clip> out) {
+        if (o == null) return;
+        String url = o.optString("url", "");
+        if (url.isEmpty()) return;
+        if (!url.endsWith(".mov") && !url.contains("Aerials") && !url.contains("itunes-assets")) return;
+        String name = o.optString("name", o.optString("assetName",
+                o.optString("location", o.optString("id", ""))));
+        out.add(new Clip(name, url));
+    }
+
+    /** GETs text; tries HTTPS then falls back to HTTP (some boxes/CDN edges balk at the cert). */
+    private String fetchText(String u) {
+        try {
+            String body = getUrl(new URL(u));
+            if (body == null && u.startsWith("https://")) {
+                body = getUrl(new URL("http://" + u.substring(8)));
+            }
+            return body;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String getUrl(URL url) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) url.openConnection();
+            c.setConnectTimeout(FETCH_TIMEOUT_MS);
+            c.setReadTimeout(FETCH_TIMEOUT_MS);
+            c.setInstanceFollowRedirects(true);
+            if (c.getResponseCode() != 200) return null;
+            BufferedReader r = new BufferedReader(
+                    new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = r.readLine()) != null) sb.append(line);
+            return sb.toString();
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) try {
+                c.disconnect();
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private void persistCache(List<Clip> live) {
+        if (catalogCache == null) return;
+        try {
+            JSONArray a = new JSONArray();
+            for (Clip c : live) {
+                JSONObject o = new JSONObject();
+                o.put("name", c.name);
+                o.put("url", c.url);
+                a.put(o);
+            }
+            try (Writer w = new FileWriter(catalogCache)) {
+                w.write(a.toString());
+            }
+        } catch (Exception ignore) {
+            // Cache is a nice-to-have; never fatal.
+        }
+    }
+
+    private void loadCachedCatalog() {
+        if (catalogCache == null || !catalogCache.exists()) return;
+        try {
+            byte[] b = Files.readAllBytes(catalogCache.toPath());
+            JSONArray a = new JSONArray(new String(b, StandardCharsets.UTF_8));
+            List<Clip> cached = new ArrayList<>();
+            for (int i = 0; i < a.length(); i++) {
+                JSONObject o = a.optJSONObject(i);
+                if (o == null) continue;
+                String u = o.optString("url", "");
+                if (u.isEmpty()) continue;
+                cached.add(new Clip(o.optString("name", ""), u));
+            }
+            if (!cached.isEmpty()) {
+                synchronized (clipsLock) {
+                    clips.clear();
+                    clips.addAll(cached);
+                }
+                android.util.Log.i("Veil", "catalog loaded from cache: " + cached.size() + " clips");
+            }
+        } catch (Exception ignore) {
         }
     }
 
@@ -206,16 +408,24 @@ final class VideoEngine {
     }
 
     private void playAnother(int step) {
-        if (clips.isEmpty() || !started) return;
+        int size;
+        synchronized (clipsLock) {
+            size = clips.size();
+        }
+        if (size == 0 || !started) return;
         int pick;
         if (step == 0) {
-            pick = clips.size() > 1 ? random.nextInt(clips.size()) : 0;
-            if (pick >= lastPick && lastPick >= 0) pick = (pick + 1) % clips.size();
+            pick = size > 1 ? random.nextInt(size) : 0;
+            if (pick >= lastPick && lastPick >= 0) pick = (pick + 1) % size;
         } else {
-            pick = ((lastPick < 0 ? 0 : lastPick) + step + clips.size()) % clips.size();
+            pick = ((lastPick < 0 ? 0 : lastPick) + step + size) % size;
         }
         lastPick = pick;
-        playClip(clips.get(pick), 0L, false);
+        Clip clip;
+        synchronized (clipsLock) {
+            clip = clips.get(pick);
+        }
+        playClip(clip, 0L, false);
     }
 
     /**
@@ -225,7 +435,7 @@ final class VideoEngine {
      */
     private void playClip(Clip clip, long seekMs, boolean viaHttp) {
         if (!started) return;
-        lastPick = clips.indexOf(clip);
+        lastPick = indexOf(clip);
         current = clip;
         releasePlayer();
         final String url = viaHttp ? toHttp(clip.url) : clip.url;
@@ -271,6 +481,12 @@ final class VideoEngine {
             } else {
                 failToStill(e.getMessage());
             }
+        }
+    }
+
+    private int indexOf(Clip clip) {
+        synchronized (clipsLock) {
+            return clips.indexOf(clip);
         }
     }
 
@@ -345,6 +561,18 @@ final class VideoEngine {
         Clip(String name, String url) {
             this.name = name;
             this.url = url;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof Clip)) return false;
+            return url.equals(((Clip) o).url);
+        }
+
+        @Override
+        public int hashCode() {
+            return url.hashCode();
         }
     }
 }
