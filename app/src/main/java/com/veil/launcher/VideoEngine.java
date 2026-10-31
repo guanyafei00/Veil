@@ -14,6 +14,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -21,7 +22,6 @@ import java.io.Writer;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -54,14 +54,16 @@ final class VideoEngine {
     private static final int FETCH_TIMEOUT_MS = 8_000;
 
     /**
-     * Candidate Apple manifest URLs, tried in order. Apple has moved this endpoint at least twice
-     * (V1 -> V2 -> itunes-assets), so we keep a list and take the first that answers. The legacy
-     * /Aerials/2x/master.json is the historical one; add newer endpoints here as they appear.
-     * Verified-on-device is required — see logcat tag "Veil" ("catalog auto-updated" vs
-     * "using bundled playlist").
+     * Apple's public Aerial manifest, tried in order. The plain JSON feed (Aerials/2x/entries.json)
+     * is the only simple, parseable endpoint Apple still serves; it returns ~13 clips (a rotating
+     * "initial" subset). The fuller catalogs live inside .tar/.plist bundles that are too heavy to
+     * unpack on a TV box, so we MERGE whatever this returns on top of the bundled 114-clip list
+     * (dedupe by URL) rather than replace it — auto-update adds new clips without ever shrinking.
+     * Add newer endpoints here as Apple shifts them. Verified-on-device via logcat tag "Veil"
+     * ("catalog live-fetch from ... +N new" vs "using bundled playlist" when unreachable).
      */
     private static final String[] MANIFEST_URLS = {
-            "https://sylvan.apple.com/Aerials/2x/master.json"
+            "https://sylvan.apple.com/Aerials/2x/entries.json"
     };
 
     /**
@@ -145,13 +147,15 @@ final class VideoEngine {
                     if (s == null) continue;
                     List<Clip> live = parseAppleManifest(s);
                     if (live != null && !live.isEmpty()) {
+                        int added;
                         synchronized (clipsLock) {
-                            clips.clear();
-                            clips.addAll(live);
+                            int before = clips.size();
+                            for (Clip c : live) if (!clips.contains(c)) clips.add(c);
+                            added = clips.size() - before;
                         }
-                        persistCache(live);
-                        android.util.Log.i("Veil", "catalog auto-updated from " + base
-                                + ": " + live.size() + " clips");
+                        if (added > 0) persistCache(live);
+                        android.util.Log.i("Veil", "catalog live-fetch from " + base + ": "
+                                + live.size() + " seen, +" + added + " new, total " + clips.size());
                         return;
                     }
                 } catch (Exception e) {
@@ -162,7 +166,8 @@ final class VideoEngine {
         }).start();
     }
 
-    /** Parses Apple's manifest into clips. Handles a bare array, or a resources->items tree. */
+    /** Parses Apple's manifest into clips. Handles a bare array, the modern assets[] feed,
+     *  or a legacy resources->items/assets tree. */
     private List<Clip> parseAppleManifest(String s) throws Exception {
         List<Clip> out = new ArrayList<>();
         Object root = new JSONTokener(s).nextValue();
@@ -171,6 +176,12 @@ final class VideoEngine {
             for (int i = 0; i < arr.length(); i++) collectClip(arr.optJSONObject(i), out);
         } else if (root instanceof JSONObject) {
             JSONObject obj = (JSONObject) root;
+            // Modern feed: "assets": [ { id, accessibilityLabel, url-1080-SDR, url-4K-SDR, ... } ]
+            JSONArray assets = obj.optJSONArray("assets");
+            if (assets != null) {
+                for (int i = 0; i < assets.length(); i++) collectAsset(assets.optJSONObject(i), out);
+            }
+            // Legacy feed: "resources": [ { url }, ... ] each pointing to a sub-manifest.
             JSONArray res = obj.optJSONArray("resources");
             if (res != null) {
                 int cap = Math.min(res.length(), 60);   // bound nested fetches
@@ -196,16 +207,48 @@ final class VideoEngine {
         return out;
     }
 
+    /** Pulls name + best URL variant out of an asset-shaped object (url-1080-SDR, etc.). */
+    private void collectAsset(JSONObject a, List<Clip> out) {
+        if (a == null) return;
+        String url = bestUrl(a);
+        if (url == null) return;
+        String name = a.optString("accessibilityLabel",
+                a.optString("name", a.optString("id", "")));
+        out.add(new Clip(name, url));
+    }
+
+    /** Picks the most broadly-decodable variant: 1080p SDR HEVC first (matches the bundled
+     *  /Aerials/2x/Videos/*.mov we already know these boxes decode), then 4K, then any url-*.mov. */
+    private String bestUrl(JSONObject a) {
+        String[] prefs = {"url-1080-SDR", "url-1080-H264", "url-4K-SDR", "url-4K-H264"};
+        for (String k : prefs) {
+            String u = a.optString(k, "");
+            if (u.endsWith(".mov")) return u;
+        }
+        JSONArray names = a.names();
+        if (names != null) {
+            for (int i = 0; i < names.length(); i++) {
+                String k = names.optString(i);
+                if (k.startsWith("url")) {
+                    String u = a.optString(k, "");
+                    if (u.endsWith(".mov")) return u;
+                }
+            }
+        }
+        String u = a.optString("url", "");
+        return u.isEmpty() ? null : u;
+    }
+
     private void collectItems(JSONArray items, List<Clip> out) {
         if (items == null) return;
-        for (int i = 0; i < items.length(); i++) collectClip(items.optJSONObject(i), out);
+        for (int i = 0; i < items.length(); i++) collectAsset(items.optJSONObject(i), out);
     }
 
     private void collectAssets(JSONObject assets, List<Clip> out) {
         if (assets == null) return;
         for (int i = 0; i < assets.length(); i++) {
             Object v = assets.opt(assets.names().optString(i));
-            if (v instanceof JSONObject) collectClip((JSONObject) v, out);
+            if (v instanceof JSONObject) collectAsset((JSONObject) v, out);
         }
     }
 
@@ -275,10 +318,22 @@ final class VideoEngine {
         }
     }
 
+    /** Reads a file's bytes with the legacy stream API (File.toPath()/Files needs API 26+, which
+     *  older TV boxes we still support don't have). */
+    private static byte[] readAllBytes(File f) throws Exception {
+        try (InputStream in = new FileInputStream(f)) {
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            return bo.toByteArray();
+        }
+    }
+
     private void loadCachedCatalog() {
         if (catalogCache == null || !catalogCache.exists()) return;
         try {
-            byte[] b = Files.readAllBytes(catalogCache.toPath());
+            byte[] b = readAllBytes(catalogCache);
             JSONArray a = new JSONArray(new String(b, StandardCharsets.UTF_8));
             List<Clip> cached = new ArrayList<>();
             for (int i = 0; i < a.length(); i++) {
@@ -289,11 +344,15 @@ final class VideoEngine {
                 cached.add(new Clip(o.optString("name", ""), u));
             }
             if (!cached.isEmpty()) {
+                int added;
                 synchronized (clipsLock) {
-                    clips.clear();
-                    clips.addAll(cached);
+                    int before = clips.size();
+                    for (Clip c : cached) if (!clips.contains(c)) clips.add(c);
+                    added = clips.size() - before;
                 }
-                android.util.Log.i("Veil", "catalog loaded from cache: " + cached.size() + " clips");
+                if (added > 0)
+                    android.util.Log.i("Veil", "catalog restored from cache: +" + added
+                            + " live clips, total " + clips.size());
             }
         } catch (Exception ignore) {
         }
