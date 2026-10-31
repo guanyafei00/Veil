@@ -43,6 +43,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -139,8 +140,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private android.widget.ImageView wallFadeView;
     /** The live Apple video video surface behind the UI; the desktop "航拍视频真播" background. */
     private SurfaceView bgVideoView;
-    /** Streams the video clips; toggles wallpaperView so the video shows through when playing. */
-    private WallpaperVideoPlayer bgVideo;
+    /** Drives the shared VideoEngine for the desktop surface; reveals wallpaperView when playing. */
+    private final VideoEngine.Listener desktopVideoListener = new VideoEngine.Listener() {
+        @Override
+        public void onPlayingChanged(boolean playing) {
+            if (bgVideoView != null) bgVideoView.setVisibility(playing ? View.VISIBLE : View.GONE);
+            if (wallpaperView != null)
+                wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+        }
+
+        @Override
+        public void onClipResolved(String name) {
+            // The desktop has no caption overlay.
+        }
+    };
     private boolean wallTransitioning;
     /** The Ken Burns breath running on wallpaperView; paused while the desktop is away. */
     private android.animation.ValueAnimator breatheAnim;
@@ -367,9 +380,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // boxes (Phicomm T1), which would black out the whole desktop. The player reveals it
         // only while a clip is actually preparing/playing and parks it again on failure.
         bgVideoView.setVisibility(View.GONE);
-        bgVideo = new WallpaperVideoPlayer(this, bgVideoView, playing -> {
-            if (wallpaperView != null) {
-                wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+        // The desktop owns one surface of the shared VideoEngine; the screensaver owns the other.
+        // Handing the surface in/out is all the launcher does here — the engine does the decoding
+        // and keeps the stream alive across the desktop<->screensaver hand-off.
+        bgVideoView.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder h) {
+                VideoEngine.INSTANCE.init(MainActivity.this);
+                VideoEngine.INSTANCE.setDesktopHolder(h, desktopVideoListener);
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder h, int format, int width, int height) {
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder h) {
+                VideoEngine.INSTANCE.clearDesktopHolder();
             }
         });
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
@@ -1078,13 +1105,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * player is already in the right state.
      */
     private void updateWallpaperVideo() {
-        if (bgVideo == null) return;
+        VideoEngine engine = VideoEngine.INSTANCE;
+        engine.init(this);
         String src = prefs.loadVideoSource();
-        android.util.Log.i("Veil", "video gate: source=" + src + " active=" + bgVideo.isActive());
+        android.util.Log.i("Veil", "video gate: source=" + src + " started=" + engine.isStarted());
+        engine.useDesktop();
         if ("video".equals(src)) {
-            if (!bgVideo.isActive()) bgVideo.start();
+            engine.start();
         } else {
-            bgVideo.stop();
+            engine.pause();
         }
     }
 
@@ -1472,6 +1501,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onResume() {
         super.onResume();
+        // Returning from the screensaver (or any pause): re-attach the desktop surface to the
+        // shared engine so the video keeps flowing on the desktop instead of restarting.
+        VideoEngine.INSTANCE.init(this);
+        VideoEngine.INSTANCE.useDesktop();
+        updateWallpaperVideo();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
             registerReceiver(netCheckReceiver, netCheckFilter, Context.RECEIVER_NOT_EXPORTED);
@@ -1663,7 +1697,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The desktop is genuinely off screen (another app covers us, or the screen is off):
         // the breath rests, the video tears down so it isn't decoding behind someone else.
         if (breatheAnim != null) breatheAnim.pause();
-        if (bgVideo != null) bgVideo.pause();
+        VideoEngine.INSTANCE.pause();
     }
 
     @Override
@@ -1699,7 +1733,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (bgVideo != null) bgVideo.release();
+        VideoEngine.INSTANCE.release();
         if (videoTicker != null) handler.removeCallbacks(videoTicker);
         handler.removeCallbacks(screensaverTick);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);

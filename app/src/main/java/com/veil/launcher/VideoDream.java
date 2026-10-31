@@ -1,6 +1,5 @@
 package com.veil.launcher;
 
-import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
 import android.service.dreams.DreamService;
@@ -10,55 +9,48 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.widget.TextView;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
 /**
- * A full-screen streaming video screensaver: Apple TV videos streamed straight from
- * Apple's servers — nothing in the APK but a 16 KB playlist. A thin corner clock and the place
- * caption sit over the video; left/right keys jump to the previous/next clip. When the network
- * or the codec fails it quietly falls back to the drifting clock look, so the screen is never
- * dead. Videos play at the server's 2K H.264 bitrate; the saver is opt-in in the system's
- * screensaver picker, so nobody pays the traffic by accident.
+ * A full-screen streaming video screensaver that shares the desktop's single decode: when the
+ * dream begins it just takes over the shared player's output surface (setDisplay), so the very
+ * same clip keeps playing — no re-buffer, no restart. A thin corner clock and the place caption
+ * sit over the video; left/right keys hop between clips. When the network or codec fails it falls
+ * back to the drifting clock look, so the screen is never dead.
  */
 public class VideoDream extends DreamService implements SurfaceHolder.Callback {
 
-    /** Give a clip this long to become playable before falling back to the clock. */
-    private static final long PREPARE_TIMEOUT_MS = 12_000L;
-
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
-
-    private static final class Clip {
-        final String name, url;
-
-        Clip(String name, String url) {
-            this.name = name;
-            this.url = url;
-        }
-    }
-
-    private final List<Clip> clips = new ArrayList<>();
-    private int lastPick = -1;
+    private final VideoEngine engine = VideoEngine.INSTANCE;
 
     private SurfaceView surface;
-    private SurfaceHolder holder;
     private View overlay, fallback;
     private TextView caption;
-    private MediaPlayer player;
-    private boolean surfaceReady;
     private boolean stopped;
-    private final Runnable prepareTimeout = new Runnable() {
+
+    /** The engine drives our surface: show the video when it's live, the clock when it isn't. */
+    private final VideoEngine.Listener videoListener = new VideoEngine.Listener() {
         @Override
-        public void run() {
-            failToClock("prepare timeout");
+        public void onPlayingChanged(boolean playing) {
+            if (playing) {
+                handler.removeCallbacks(driftClock);
+                fallback.setVisibility(View.GONE);
+                overlay.setVisibility(View.VISIBLE);
+                surface.setVisibility(View.VISIBLE);
+            } else {
+                // No network / bad codec: show the drifting clock instead of a dead screen.
+                fallback.setVisibility(View.VISIBLE);
+                overlay.setVisibility(View.GONE);
+                surface.setVisibility(View.GONE);
+                handler.removeCallbacks(driftClock);
+                driftClock.run();
+            }
+        }
+
+        @Override
+        public void onClipResolved(String name) {
+            if (caption != null) caption.setText(name);
         }
     };
 
@@ -74,20 +66,20 @@ public class VideoDream extends DreamService implements SurfaceHolder.Callback {
         overlay = findViewById(R.id.videoOverlay);
         fallback = findViewById(R.id.videoFallback);
         caption = findViewById(R.id.videoCaption);
-        holder = surface.getHolder();
-        holder.addCallback(this);
-        loadPlaylist();
-        overlay.setVisibility(clips.isEmpty() ? View.GONE : View.VISIBLE);
+        surface.getHolder().addCallback(this);
+        engine.init(this);
+        // Start on the clock; the engine swaps us to video the moment a clip is playable.
+        fallback.setVisibility(View.VISIBLE);
+        overlay.setVisibility(View.GONE);
+        surface.setVisibility(View.GONE);
     }
 
     @Override
     public void onDreamingStarted() {
         super.onDreamingStarted();
-        // surfaceCreated may already have fired, or may still be coming; playFromDesktop() guards both.
-        if (!clips.isEmpty() && surfaceReady && !stopped && player == null
-                && fallback.getVisibility() != View.VISIBLE) {
-            playFromDesktop();
-        }
+        // Take over the shared player's output from the desktop — same clip, no restart.
+        engine.useDream();
+        if (!engine.isStarted()) engine.start();
     }
 
     @Override
@@ -96,7 +88,7 @@ public class VideoDream extends DreamService implements SurfaceHolder.Callback {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             int keyCode = event.getKeyCode();
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                playAnother(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
+                engine.hop(keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1);
                 return true;
             }
         }
@@ -106,41 +98,23 @@ public class VideoDream extends DreamService implements SurfaceHolder.Callback {
     @Override
     public void onDreamingStopped() {
         stopped = true;
-        releasePlayer();
+        // Hand the output back to the desktop so the video flows on without restarting.
+        engine.useDesktop();
+        engine.clearDreamHolder();
         super.onDreamingStopped();
     }
 
     @Override
     public void onDetachedFromWindow() {
         stopped = true;
-        releasePlayer();
+        engine.clearDreamHolder();
         super.onDetachedFromWindow();
-    }
-
-    /** Reads the bundled 16 KB playlist; a broken one just means the clock fallback. */
-    private void loadPlaylist() {
-        try (InputStream in = getAssets().open("videos.json")) {
-            ByteArrayOutputStream bo = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
-            JSONArray a = new JSONArray(new String(bo.toByteArray(), StandardCharsets.UTF_8));
-            for (int i = 0; i < a.length(); i++) {
-                JSONObject o = a.optJSONObject(i);
-                if (o == null) continue;
-                String url = o.optString("url", "");
-                if (!url.isEmpty()) clips.add(new Clip(o.optString("name", ""), url));
-            }
-        } catch (Exception e) {
-            // A missing or broken clips.json: the screensaver stays dark instead of crashing.
-            android.util.Log.w("Veil", "video clips unreadable: " + e);
-        }
     }
 
     @Override
     public void surfaceCreated(SurfaceHolder h) {
-        surfaceReady = true;
-        if (!clips.isEmpty() && !stopped) playFromDesktop();
+        engine.setDreamHolder(h, videoListener);
+        engine.useDream();
     }
 
     @Override
@@ -149,109 +123,11 @@ public class VideoDream extends DreamService implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceDestroyed(SurfaceHolder h) {
-        surfaceReady = false;
+        engine.clearDreamHolder();
     }
 
-    /** Plays a fresh random clip (never the same one twice in a row). */
-    private void playRandom() {
-        playAnother(0);
-    }
-
-    /**
-     * Continues whatever the desktop video background is currently showing when we can; otherwise
-     * falls back to a random clip. Keeps the screensaver visually continuous with the desktop.
-     */
-    private void playFromDesktop() {
-        if (player != null) return;   // already running
-        if (clips.isEmpty() || stopped) return;
-        String url = WallpaperState.currentUrl();
-        if (url != null && WallpaperState.ageMs() >= 0 && WallpaperState.ageMs() < 60_000L) {
-            for (Clip c : clips) {
-                if (url.equals(c.url)) {
-                    android.util.Log.i("Veil", "screensaver reuses desktop clip: " + c.name);
-                    playClip(c, WallpaperState.currentPositionMs());
-                    return;
-                }
-            }
-        }
-        playRandom();
-    }
-
-    /** Plays the clip `step` away from the current one (wraps around); 0 = a fresh random pick. */
-    private void playAnother(int step) {
-        if (clips.isEmpty() || stopped) return;
-        int pick;
-        if (step == 0) {
-            pick = clips.size() > 1 ? random.nextInt(clips.size() - 1) : 0;
-            if (pick >= lastPick && lastPick >= 0) pick++;   // never the same clip twice in a row
-        } else {
-            pick = ((lastPick < 0 ? 0 : lastPick) + step + clips.size()) % clips.size();
-        }
-        lastPick = pick;
-        playClip(clips.get(pick), 0L);
-    }
-
-    /** Streams {@code clip} from its URL, optionally resuming near {@code seekMs}; clock on failure. */
-    private void playClip(Clip clip, long seekMs) {
-        if (clip == null || stopped || !surfaceReady) return;
-        lastPick = clips.indexOf(clip);
-        caption.setText(clip.name);
-        releasePlayer();
-        try {
-            player = new MediaPlayer();
-            player.setDataSource(clip.url);
-            player.setDisplay(holder);
-            player.setOnPreparedListener(p -> {
-                handler.removeCallbacks(prepareTimeout);
-                fallback.setVisibility(View.GONE);
-                surface.setVisibility(View.VISIBLE);
-                p.setLooping(false);
-                if (seekMs > 0) {
-                    try {
-                        p.seekTo((int) seekMs);
-                    } catch (Exception ignore) {
-                        // Resuming a live stream is best-effort; starting from 0 is fine.
-                    }
-                }
-                p.start();
-            });
-            player.setOnCompletionListener(p -> playAnother(1));   // roll into the next landscape
-            player.setOnErrorListener((p, what, extra) -> {
-                failToClock("playback error " + what);
-                return true;
-            });
-            player.prepareAsync();
-            handler.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
-        } catch (Exception e) {
-            failToClock(e.getMessage());
-        }
-    }
-
-    /** No network / bad codec / too slow: show the drifting clock instead of a dead screen. */
-    private void failToClock(String why) {
-        if (stopped) return;
-        android.util.Log.w("Veil", "fallback: " + why);
-        handler.removeCallbacks(prepareTimeout);
-        releasePlayer();
-        surface.setVisibility(View.GONE);
-        overlay.setVisibility(View.GONE);
-        fallback.setVisibility(View.VISIBLE);
-        // Slow drift, same idea as ClockDream: nothing stays still long enough to burn in.
-        handler.removeCallbacks(fallbackTick);
-        fallbackTick.run();
-        // Try the network again in a few minutes — the TV may have reconnected overnight.
-        handler.postDelayed(() -> {
-            if (!stopped && !clips.isEmpty()) {
-                handler.removeCallbacks(fallbackTick);
-                fallback.setVisibility(View.GONE);
-                overlay.setVisibility(View.VISIBLE);
-                playRandom();
-            }
-        }, 3 * 60_000L);
-    }
-
-    /** Moves the fallback clock to a new spot every minute and a half. */
-    private final Runnable fallbackTick = new Runnable() {
+    /** Moves the fallback clock to a new spot every minute and a half (no burn-in). */
+    private final Runnable driftClock = new Runnable() {
         @Override
         public void run() {
             if (stopped || fallback.getVisibility() != View.VISIBLE) return;
@@ -265,21 +141,4 @@ public class VideoDream extends DreamService implements SurfaceHolder.Callback {
             handler.postDelayed(this, 90_000L);
         }
     };
-
-    private void releasePlayer() {
-        handler.removeCallbacks(prepareTimeout);
-        if (player != null) {
-            try {
-                player.stop();
-            } catch (Exception e) {
-                android.util.Log.d("Veil", "video player stop skipped: " + e);
-            }
-            try {
-                player.release();
-            } catch (Exception e) {
-                android.util.Log.d("Veil", "video player release skipped: " + e);
-            }
-            player = null;
-        }
-    }
 }
