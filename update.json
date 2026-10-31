@@ -1,0 +1,9 @@
+{
+  "versionCode": 218,
+  "versionName": "2.1.7",
+  "notes": "航拍视频壁纸流式播放修复：优先走 HTTP 直连避免 TLS 卡顿，prepare 超时从 12 秒放宽到 30 秒，超时自动跳到下一条视频；目录刷新时自动探测失效链接并从轮播中剔除。新增应用内检查更新与自更新功能。",
+  "mandatory": false,
+  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.1.7/Veil-TV-full-v2.1.7.apk",
+  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.1.7/Veil-TV-full-v2.1.7.apk",
+  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.1.7/Veil-TV-lite-v2.1.7.apk"
+}

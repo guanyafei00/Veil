@@ -48,10 +48,11 @@ import java.nio.charset.StandardCharsets;
 final class Updater {
 
     /** Build-time fallback manifest URL. Leave "" to require per-device configuration in Settings. */
-    static final String DEFAULT_MANIFEST_URL = "";
+    static final String DEFAULT_MANIFEST_URL =
+            "https://cdn.jsdelivr.net/gh/guanyafei00/Veil@main/update.json";
 
     /** Last-resort version code if PackageManager is unavailable (almost never used). */
-    private static final int FALLBACK_VERSION_CODE = 217;
+    private static final int FALLBACK_VERSION_CODE = 218;
 
     private static final String TAG = "Veil.Update";
     private static final long AUTO_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000; // at most once a day
