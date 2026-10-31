@@ -4,6 +4,7 @@ import android.content.Context;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.SurfaceHolder;
 
 import org.json.JSONArray;
@@ -23,6 +24,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 
@@ -45,7 +47,7 @@ final class VideoEngine {
     static final VideoEngine INSTANCE = new VideoEngine();
 
     /** Give a clip this long to become playable before falling back. */
-    private static final long PREPARE_TIMEOUT_MS = 12_000L;
+    private static final long PREPARE_TIMEOUT_MS = 30_000L;
     /** Wait this long after a failure before retrying the network. */
     private static final long RETRY_MS = 30_000L;
     /** How often we sample the playback position for diagnostics. */
@@ -83,6 +85,8 @@ final class VideoEngine {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
     private final List<Clip> clips = new ArrayList<>();
+    /** The clips adopted from the live manifest (or its cache) — the auto-updated part. */
+    private final List<Clip> cachedClips = new ArrayList<>();
     private final Object clipsLock = new Object();
 
     private Context ctx;
@@ -96,7 +100,23 @@ final class VideoEngine {
     private int lastPick = -1;
     private boolean playing;
     private boolean started;
-    private final Runnable prepareTimeout = () -> failToStill("prepare timeout");
+    /** Consecutive prepare-timeout hops without a success; caps the skip-ahead ladder. */
+    private int timeoutHops;
+    private final Runnable prepareTimeout = new Runnable() {
+        @Override
+        public void run() {
+            // A hanging clip (dead CDN file, throttled edge) is SKIPPED, not retried: the
+            // catalog is large, the next clip usually prepares in seconds. Two skips in a row
+            // mean the network itself is gone — fall back to the still.
+            if (timeoutHops < 2) {
+                timeoutHops++;
+                android.util.Log.w("Veil", "video prepare timeout, hop to the next clip");
+                playAnother(1);
+            } else {
+                failToStill("prepare timeout");
+            }
+        }
+    };
 
     private VideoEngine() {
     }
@@ -137,33 +157,100 @@ final class VideoEngine {
 
     // ---- live catalog refresh (auto-update) ----
 
-    /** Fetches Apple's current manifest off the main thread; adopts it if it parses. */
+    /**
+     * Fetches Apple's current manifest off the main thread; adopts it if it parses. Every
+     * candidate clip is probed for existence first — Apple's live feed lists files the CDN
+     * no longer serves (verified 2026-10: 13/13 entries.json videos answer 404), and a dead
+     * clip in the rotation means a 30 s hang whenever it is picked.
+     */
     private void refreshCatalogAsync() {
         if (ctx == null) return;
         new Thread(() -> {
+            HashMap<String, Boolean> memo = new HashMap<>();
+            List<Clip> adopted = null;
             for (String base : MANIFEST_URLS) {
                 try {
                     String s = fetchText(base);
                     if (s == null) continue;
                     List<Clip> live = parseAppleManifest(s);
                     if (live != null && !live.isEmpty()) {
-                        int added;
-                        synchronized (clipsLock) {
-                            int before = clips.size();
-                            for (Clip c : live) if (!clips.contains(c)) clips.add(c);
-                            added = clips.size() - before;
-                        }
-                        if (added > 0) persistCache(live);
+                        adopted = filterAlive(live, memo);
                         android.util.Log.i("Veil", "catalog live-fetch from " + base + ": "
-                                + live.size() + " seen, +" + added + " new, total " + clips.size());
-                        return;
+                                + live.size() + " seen, " + (live.size() - adopted.size())
+                                + " dead, " + adopted.size() + " usable");
+                        break;
                     }
                 } catch (Exception e) {
                     android.util.Log.w("Veil", "catalog fetch failed for " + base + ": " + e);
                 }
             }
-            android.util.Log.i("Veil", "catalog: using bundled playlist (live fetch unavailable)");
+            // Re-validate the previously adopted clips too (a feed that was healthy when stored
+            // can rot), drop the dead ones from the rotation and rewrite the cache clean.
+            List<Clip> cached;
+            synchronized (clipsLock) {
+                cached = new ArrayList<>(cachedClips);
+            }
+            List<Clip> aliveCached = filterAlive(cached, memo);
+            boolean cacheChanged = aliveCached.size() != cached.size();
+            int added = 0;
+            synchronized (clipsLock) {
+                if (adopted != null) {
+                    for (Clip c : adopted) if (!clips.contains(c)) { clips.add(c); added++; }
+                }
+                for (Clip c : cached) {
+                    if (!aliveCached.contains(c) && clips.contains(c)) clips.remove(c);
+                }
+            }
+            if (added > 0 || cacheChanged) {
+                List<Clip> persist = new ArrayList<>(aliveCached);
+                if (adopted != null) {
+                    for (Clip c : adopted) if (!persist.contains(c)) persist.add(c);
+                }
+                persistCache(persist);
+            }
+            if (added == 0 && adopted == null && !cacheChanged) {
+                android.util.Log.i("Veil", "catalog: using bundled playlist (live fetch unavailable)");
+            }
         }).start();
+    }
+
+    /** Keeps only clips whose URL still answers; network trouble counts as alive (no proof, no drop). */
+    private List<Clip> filterAlive(List<Clip> in, HashMap<String, Boolean> memo) {
+        List<Clip> out = new ArrayList<>();
+        for (Clip c : in) if (alive(c.url, memo)) out.add(c);
+        return out;
+    }
+
+    private boolean alive(String url, HashMap<String, Boolean> memo) {
+        Boolean m = memo.get(url);
+        if (m != null) return m;
+        boolean a = probeAlive(url);
+        memo.put(url, a);
+        return a;
+    }
+
+    /** 500-byte range probe; 200/206 = exists, anything else = drop. */
+    private boolean probeAlive(String url) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setConnectTimeout(6000);
+            c.setReadTimeout(6000);
+            c.setInstanceFollowRedirects(true);
+            c.setRequestProperty("Range", "bytes=0-500");
+            int code = c.getResponseCode();
+            if (code != 200 && code != 206) {
+                android.util.Log.w("Veil", "catalog: clip answers HTTP " + code + ", dropping: " + url);
+            }
+            return code == 200 || code == 206;
+        } catch (Exception e) {
+            return true;   // offline / blocked probe proves nothing about the file
+        } finally {
+            if (c != null) try {
+                c.disconnect();
+            } catch (Exception ignore) {
+            }
+        }
     }
 
     /** Parses Apple's manifest into clips. Handles a bare array, the modern assets[] feed,
@@ -344,6 +431,7 @@ final class VideoEngine {
                 cached.add(new Clip(o.optString("name", ""), u));
             }
             if (!cached.isEmpty()) {
+                cachedClips.addAll(cached);
                 int added;
                 synchronized (clipsLock) {
                     int before = clips.size();
@@ -484,13 +572,15 @@ final class VideoEngine {
         synchronized (clipsLock) {
             clip = clips.get(pick);
         }
-        playClip(clip, 0L, false);
+        playClip(clip, 0L, true);   // plain HTTP first: the media TLS stack hangs on this CDN
     }
 
     /**
-     * Streams {@code clip} straight from its URL. Tries HTTPS first; if the decoder or transport
-     * fails, retries the plain-HTTP variant once before giving up to the fallback. The same stream
-     * is reused across desktop and screensaver, so there is never a second decode.
+     * Streams {@code clip} straight from its URL. The FIRST attempt goes over plain HTTP: on the
+     * T1 the media stack's own TLS hand-shake with the Apple CDN edge hangs until it errors
+     * (~36s), while the very same file over HTTP prepares in ~2s (the tail-seek for the moov
+     * atom included). HTTPS stays as the one-shot fallback for networks that block port 80.
+     * The same stream is reused across desktop and screensaver, so there is never a second decode.
      */
     private void playClip(Clip clip, long seekMs, boolean viaHttp) {
         if (!started) return;
@@ -498,12 +588,17 @@ final class VideoEngine {
         current = clip;
         releasePlayer();
         final String url = viaHttp ? toHttp(clip.url) : clip.url;
+        final long prepareBegan = SystemClock.elapsedRealtime();
+        android.util.Log.i("Veil", "video prepare start: " + clip.name + (viaHttp ? " (http)" : ""));
         try {
             player = new MediaPlayer();
             player.setDataSource(url);
             player.setDisplay(dreamActive ? dreamHolder : desktopHolder);
             player.setOnPreparedListener(p -> {
                 main.removeCallbacks(prepareTimeout);
+                timeoutHops = 0;
+                android.util.Log.i("Veil", "video prepared in "
+                        + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s: " + clip.name);
                 setPlaying(true);
                 p.setLooping(false);
                 if (seekMs > 0) {
@@ -523,10 +618,12 @@ final class VideoEngine {
             });
             player.setOnCompletionListener(p -> playAnother(1));   // roll into the next landscape
             player.setOnErrorListener((p, what, extra) -> {
-                if (!viaHttp) {
-                    // One cheap retry over plain HTTP (some box TLS stacks balk at the CDN cert).
-                    android.util.Log.w("Veil", "video https failed (" + what + "), try http");
-                    playClip(clip, seekMs, true);
+                android.util.Log.w("Veil", "video error what=" + what + " extra=" + extra
+                        + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s");
+                if (viaHttp) {
+                    // One cheap retry over HTTPS (for networks that block plain HTTP).
+                    android.util.Log.w("Veil", "video http failed (" + what + "), try https");
+                    playClip(clip, seekMs, false);
                 } else {
                     failToStill("playback error " + what);
                 }
@@ -535,8 +632,8 @@ final class VideoEngine {
             player.prepareAsync();
             main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
         } catch (Exception e) {
-            if (!viaHttp) {
-                playClip(clip, seekMs, true);
+            if (viaHttp) {
+                playClip(clip, seekMs, false);
             } else {
                 failToStill(e.getMessage());
             }
@@ -573,6 +670,7 @@ final class VideoEngine {
     private void failToStill(String why) {
         if (!started) return;
         android.util.Log.w("Veil", "video fallback: " + why);
+        timeoutHops = 0;
         main.removeCallbacks(prepareTimeout);
         main.removeCallbacks(positionTick);
         releasePlayer();
