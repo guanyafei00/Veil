@@ -144,6 +144,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final VideoEngine.Listener desktopVideoListener = new VideoEngine.Listener() {
         @Override
         public void onPlayingChanged(boolean playing) {
+            android.util.Log.i("Veil", "desktop onPlayingChanged " + playing
+                    + " -> video " + (playing ? "VISIBLE" : "GONE")
+                    + ", still " + (playing ? "INVISIBLE" : "VISIBLE"));
             if (bgVideoView != null) bgVideoView.setVisibility(playing ? View.VISIBLE : View.GONE);
             if (wallpaperView != null)
                 wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
@@ -399,6 +402,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 VideoEngine.INSTANCE.clearDesktopHolder();
             }
         });
+        // Register the holder EAGERLY, not just from surfaceCreated: the view parks GONE while
+        // idle, and a standards-following ROM (TCL mt5879) never creates the surface — nor fires
+        // surfaceCreated — for a GONE SurfaceView. That left the engine playing into a
+        // placeholder surface with NO listener attached: the clip "prepared", the still never
+        // gave way, and the desktop looked like video was simply broken. The holder object is
+        // valid before its surface exists; ExoPlayer picks the surface up the moment the view
+        // is revealed (its own SurfaceHolder.Callback survives the wait).
+        VideoEngine.INSTANCE.init(MainActivity.this);
+        VideoEngine.INSTANCE.setDesktopHolder(bgVideoView.getHolder(), desktopVideoListener);
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         glass = findViewById(R.id.glass);
         topBar = findViewById(R.id.topBar);

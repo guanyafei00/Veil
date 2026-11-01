@@ -63,6 +63,12 @@ dependencies {
     // FileProvider: serves the downloaded update APK to the system installer on API 24+.
     // 1.10.1 is already in the Gradle cache (transitively via recyclerview), so no download.
     implementation 'androidx.core:core:1.10.1'
+    // ExoPlayer: streams the aerials instead of MediaPlayer. Some TV ROMs (TCL mt5879) ship a
+    // vendor MediaPlayer whose HTTP source signals EOS right after fetching the tail-side moov
+    // atom, so non-fast-start MP4s (every Apple aerial) prepare but never render a frame.
+    // ExoPlayer's progressive source re-opens the tail range for the moov and then reads the
+    // mdat from offset 0, which is exactly what these files need.
+    implementation 'androidx.media3:media3-exoplayer:1.4.1'
     // Test only (never in the APK): plain JVM tests for the module card validators, src/test.
     testImplementation 'junit:junit:4.13.2'
 }

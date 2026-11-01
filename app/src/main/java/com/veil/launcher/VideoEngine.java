@@ -1,11 +1,18 @@
 package com.veil.launcher;
 
 import android.content.Context;
-import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.SurfaceHolder;
+
+import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
+import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultDataSource;
+import androidx.media3.datasource.DefaultHttpDataSource;
+import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -29,12 +36,19 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * One process-wide MediaPlayer that feeds BOTH the desktop video background and the video
+ * One process-wide ExoPlayer that feeds BOTH the desktop video background and the video
  * screensaver. The two are just surfaces that take turns owning the player's output: switching
- * between them is a single setDisplay() call, so the stream never re-buffers or restarts — it
- * flows continuously from desktop to screensaver and back, at a single decode (one stream of
- * CDN traffic, not two). Only one surface is attached at a time; the idle side simply isn't
- * rendered while the player keeps decoding, which is what makes the hand-off instant.
+ * between them is a single setVideoSurfaceHolder() call, so the stream never re-buffers or
+ * restarts — it flows continuously from desktop to screensaver and back, at a single decode (one
+ * stream of CDN traffic, not two). Only one surface is attached at a time; the idle side simply
+ * isn't rendered while the player keeps decoding, which is what makes the hand-off instant.
+ * <p>
+ * ExoPlayer (not the platform MediaPlayer) is what makes this work across TV boxes: some vendor
+ * ROMs (TCL mt5879) ship a MediaPlayer whose HTTP source signals EOS right after fetching the
+ * tail-side moov atom, so non-fast-start MP4s — every Apple aerial — "prepare" and then never
+ * render a frame. ExoPlayer re-opens the tail range for the moov and reads the mdat from
+ * offset 0; its HTTP stack also runs in-process (Java TLS), sidestepping the native media TLS
+ * hang seen on the T1.
  * <p>
  * The clip list is never hard-written to a fixed size: we ship a bundled fallback playlist
  * (assets/videos.json — Apple's public Aerial CDN URLs), and on every launch we best-effort
@@ -91,7 +105,7 @@ final class VideoEngine {
 
     private Context ctx;
     private File catalogCache;
-    private MediaPlayer player;
+    private ExoPlayer player;
     private SurfaceHolder desktopHolder, dreamHolder;
     private Listener desktopListener, dreamListener;
     private Stage stage = Stage.DESKTOP;
@@ -454,7 +468,7 @@ final class VideoEngine {
         if (!dreamActive) {
             applyStage();
             if (started && playing) notifyActive();
-            else if (started && !playing) playRandom();
+            else if (started && !playing && player == null) playRandom();
         }
     }
 
@@ -469,7 +483,7 @@ final class VideoEngine {
         if (dreamActive) {
             applyStage();
             if (started && playing) notifyActive();
-            else if (started && !playing) playRandom();
+            else if (started && !playing && player == null) playRandom();
         }
     }
 
@@ -484,7 +498,7 @@ final class VideoEngine {
         stage = Stage.DESKTOP;
         applyStage();
         if (started && playing) notifyActive();
-        else if (started && !playing) playRandom();
+        else if (started && !playing && player == null) playRandom();
     }
 
     /** Switch the rendered output to the screensaver surface (dream begins). */
@@ -493,7 +507,7 @@ final class VideoEngine {
         stage = Stage.DREAM;
         applyStage();
         if (started && playing) notifyActive();
-        else if (started && !playing) playRandom();
+        else if (started && !playing && player == null) playRandom();
     }
 
     /** Point the player at whichever surface currently owns it. */
@@ -502,7 +516,7 @@ final class VideoEngine {
         if (player != null) {
             try {
                 // h may be null mid hand-off: keep decoding, attach on the next setXHolder().
-                player.setDisplay(h);
+                player.setVideoSurfaceHolder(h);
             } catch (Exception ignore) {
             }
         }
@@ -510,9 +524,14 @@ final class VideoEngine {
 
     /** Tell the active listener its playing state — only when its surface is actually ready. */
     private void notifyActive() {
-        SurfaceHolder h = dreamActive ? dreamHolder : desktopHolder;
         Listener l = dreamActive ? dreamListener : desktopListener;
-        if (h != null && l != null) l.onPlayingChanged(playing);
+        // Note: notify even when the holder is momentarily null. Some ROMs (TCL mt5879) reap a
+        // GONE SurfaceView's surface a second or two after it is created, so by STATE_READY the
+        // holder can already be cleared — and the listener's whole job is to flip the video view
+        // VISIBLE, which re-creates the surface and hands it back to the player via applyStage().
+        // Gating on h != null here swallowed the "playing" signal and left the still on screen
+        // forever while the video decoded into a detached surface.
+        if (l != null) l.onPlayingChanged(playing);
     }
 
     // ---- lifecycle ----
@@ -521,7 +540,10 @@ final class VideoEngine {
     void start() {
         started = true;
         SurfaceHolder h = dreamActive ? dreamHolder : desktopHolder;
-        if (h != null && !playing) playRandom();
+        // player != null covers the preparing state too: two start() calls in quick succession
+        // (onResume + a wallpaper refresh) used to race here, the second one releasing the
+        // first player mid-prepare and — on a flaky CDN — throwing away the working clip.
+        if (h != null && !playing && player == null) playRandom();
     }
 
     /** Stop and release the decoder (desktop hidden, or video wallpaper turned off). */
@@ -576,10 +598,11 @@ final class VideoEngine {
     }
 
     /**
-     * Streams {@code clip} straight from its URL. The FIRST attempt goes over plain HTTP: on the
-     * T1 the media stack's own TLS hand-shake with the Apple CDN edge hangs until it errors
-     * (~36s), while the very same file over HTTP prepares in ~2s (the tail-seek for the moov
-     * atom included). HTTPS stays as the one-shot fallback for networks that block port 80.
+     * Streams {@code clip} straight from its URL. The FIRST attempt goes over plain HTTP: the
+     * Apple CDN still rate-limits some edges, and HTTP both skips one TLS round-trip and keeps
+     * the T1's native stack out of the picture entirely (ExoPlayer does its own HTTP anyway, so
+     * this is now mostly about CDN politeness). HTTPS stays as the one-shot fallback for
+     * networks that block port 80.
      * The same stream is reused across desktop and screensaver, so there is never a second decode.
      */
     private void playClip(Clip clip, long seekMs, boolean viaHttp) {
@@ -591,45 +614,52 @@ final class VideoEngine {
         final long prepareBegan = SystemClock.elapsedRealtime();
         android.util.Log.i("Veil", "video prepare start: " + clip.name + (viaHttp ? " (http)" : ""));
         try {
-            player = new MediaPlayer();
-            player.setDataSource(url);
-            player.setDisplay(dreamActive ? dreamHolder : desktopHolder);
-            player.setOnPreparedListener(p -> {
-                main.removeCallbacks(prepareTimeout);
-                timeoutHops = 0;
-                android.util.Log.i("Veil", "video prepared in "
-                        + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s: " + clip.name);
-                setPlaying(true);
-                p.setLooping(false);
-                if (seekMs > 0) {
-                    try {
-                        p.seekTo((int) seekMs);
-                    } catch (Exception ignore) {
-                        // Resuming a live stream is best-effort; playing from 0 is fine.
+            DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
+                    .setAllowCrossProtocolRedirects(true)
+                    .setConnectTimeoutMs(8_000)
+                    .setReadTimeoutMs(8_000);
+            player = new ExoPlayer.Builder(ctx, new DefaultMediaSourceFactory(
+                    new DefaultDataSource.Factory(ctx, http))).build();
+            player.setVideoSurfaceHolder(dreamActive ? dreamHolder : desktopHolder);
+            player.addListener(new Player.Listener() {
+                @Override
+                public void onPlaybackStateChanged(int state) {
+                    if (player == null) return;   // released mid-flight; stale callback
+                    if (state == Player.STATE_READY) {
+                        main.removeCallbacks(prepareTimeout);
+                        timeoutHops = 0;
+                        android.util.Log.i("Veil", "video prepared in "
+                                + (SystemClock.elapsedRealtime() - prepareBegan) / 1000
+                                + "s: " + clip.name);
+                        setPlaying(true);
+                        if (current != null) {
+                            WallpaperState.publish(current.url, seekMs);
+                            notifyClip(current.name);
+                        }
+                        main.post(positionTick);
+                    } else if (state == Player.STATE_ENDED) {
+                        playAnother(1);   // roll into the next landscape
                     }
                 }
-                p.start();
-                if (current != null) {
-                    WallpaperState.publish(current.url, seekMs);
-                    notifyClip(current.name);
+
+                @Override
+                public void onPlayerError(PlaybackException e) {
+                    if (player == null) return;
+                    android.util.Log.w("Veil", "video error " + e.getErrorCodeName()
+                            + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s");
+                    if (viaHttp) {
+                        // One cheap retry over HTTPS (for networks that block plain HTTP).
+                        android.util.Log.w("Veil", "video http failed, try https");
+                        playClip(clip, seekMs, false);
+                    } else {
+                        failToStill("playback error " + e.getErrorCodeName());
+                    }
                 }
-                main.post(positionTick);
-                android.util.Log.d("Veil", "video playing: " + clip.name + (viaHttp ? " (http)" : ""));
             });
-            player.setOnCompletionListener(p -> playAnother(1));   // roll into the next landscape
-            player.setOnErrorListener((p, what, extra) -> {
-                android.util.Log.w("Veil", "video error what=" + what + " extra=" + extra
-                        + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s");
-                if (viaHttp) {
-                    // One cheap retry over HTTPS (for networks that block plain HTTP).
-                    android.util.Log.w("Veil", "video http failed (" + what + "), try https");
-                    playClip(clip, seekMs, false);
-                } else {
-                    failToStill("playback error " + what);
-                }
-                return true;
-            });
-            player.prepareAsync();
+            player.setMediaItem(MediaItem.fromUri(url));
+            if (seekMs > 0) player.seekTo(seekMs);
+            player.setPlayWhenReady(true);
+            player.prepare();
             main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
         } catch (Exception e) {
             if (viaHttp) {
@@ -657,7 +687,7 @@ final class VideoEngine {
         public void run() {
             if (!started || player == null || !playing) return;
             try {
-                int pos = player.getCurrentPosition();
+                long pos = player.getCurrentPosition();
                 if (current != null) WallpaperState.publish(current.url, pos);
             } catch (Exception ignore) {
                 // Position is advisory; a transient error just means the next tick retries.
@@ -690,7 +720,10 @@ final class VideoEngine {
     private void setPlaying(boolean on) {
         if (playing == on) return;
         playing = on;
+        SurfaceHolder h = dreamActive ? dreamHolder : desktopHolder;
         Listener l = dreamActive ? dreamListener : desktopListener;
+        android.util.Log.i("Veil", "setPlaying(" + on + ") notify h=" + (h != null)
+                + " l=" + (l != null) + " dream=" + dreamActive);
         if (l != null) l.onPlayingChanged(on);
     }
 
@@ -698,11 +731,6 @@ final class VideoEngine {
         main.removeCallbacks(prepareTimeout);
         main.removeCallbacks(positionTick);
         if (player != null) {
-            try {
-                player.stop();
-            } catch (Exception ignore) {
-                android.util.Log.d("Veil", "video player stop skipped: " + ignore);
-            }
             try {
                 player.release();
             } catch (Exception ignore) {
