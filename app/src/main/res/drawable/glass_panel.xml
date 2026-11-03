@@ -12,12 +12,13 @@
             <corners android:radius="22dp" />
         </shape>
     </item>
-    <!-- top specular sheen: light hits the upper edge of the glass -->
+    <!-- top specular sheen: rounded to the panel's corners, or it would poke out of them -->
     <item android:bottom="72dp">
         <shape android:shape="rectangle">
             <gradient android:angle="270"
                 android:startColor="#1FFFFFFF"
                 android:endColor="#00FFFFFF" />
+            <corners android:topLeftRadius="22dp" android:topRightRadius="22dp" />
         </shape>
     </item>
 </layer-list>

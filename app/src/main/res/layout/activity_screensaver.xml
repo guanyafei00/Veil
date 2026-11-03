@@ -5,20 +5,31 @@
     android:layout_height="match_parent"
     android:background="#FF000000">
 
-    <!-- Two stacked pictures so the change is a crossfade; the front one slowly zooms. -->
+    <!-- The static still the desktop uses when its wallpaper source is NOT the aerial video.
+         Shown as-is (with a gentle breathe) so the screensaver matches the desktop. -->
     <ImageView
-        android:id="@+id/saverImgA"
+        android:id="@+id/saverStill"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="centerCrop"
-        android:alpha="0" />
+        android:visibility="gone" />
 
-    <ImageView
-        android:id="@+id/saverImgB"
+    <!-- The shared aerial video (the very same stream the desktop wallpaper plays), used only
+         when the desktop wallpaper source is the aerial video. -->
+    <SurfaceView
+        android:id="@+id/saverVideo"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:alpha="0" />
+        android:visibility="gone" />
+
+    <!-- Black curtain over the still/video: starts opaque and fades away once the content is
+         actually on screen, so entering the screensaver (or a video -> still fallback) eases in
+         instead of snapping. Sits above both content layers, below the clock. -->
+    <View
+        android:id="@+id/saverFade"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000" />
 
     <LinearLayout
         android:id="@+id/saverClock"

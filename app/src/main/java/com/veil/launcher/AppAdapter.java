@@ -55,7 +55,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
          */
         void onTileLaunch(Entry e);
 
-        /** Called when OK is held on a tile: the owner's edit menu (pin, hide, app info). */
+        /** Called when OK is held on a tile: opens the tile's edit menu (Move is its first row). */
         void onTileLongPress(int position, View card);
 
         /** Called when OK opens a folder tile; the owner asks for the password when it is locked. */
@@ -158,8 +158,6 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /** False = the owner hid the dock row (pure-wallpaper first page): the first row is a normal
      *  grid row, and the dock apps merge into the alphabetical list. */
     private boolean dockRowShown = true;
-    /** The tile's near-black plate, corners following the icon radius (shared: every tile is one size). */
-    private android.graphics.drawable.GradientDrawable plate;
     /** Dock order (config.xml dock_apps, or the owner's edits over it). */
     private List<String> favourites;
     /** Never shown as tiles (res/values/config.xml hidden_apps, or the owner's edits). */
@@ -456,6 +454,17 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 * (focused ? 4f : -6f));
         h.card.setScaleX(focused ? FOCUS_SCALE : 1f);
         h.card.setScaleY(focused ? FOCUS_SCALE : 1f);
+        // Clip the entire tile (including banners/icons supplied as unusual drawable types) to
+        // the owner's tile-radius. RoundedIconDrawable handles the image pixels too; this outline
+        // is the final guarantee that app artwork cannot paint square corners through the card.
+        h.card.setClipToOutline(iconRadiusFrac > 0f);
+        h.card.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                float r = cornerRadius(view.getWidth(), view.getHeight(), iconRadiusFrac);
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), r);
+            }
+        });
         // A full-bleed banner paints its own rounded corners, so the card's near-black plate
         // would show through every clipped corner as black edges. Dock tiles sit on the light
         // frosted band, so they go transparent too; grid icon tiles keep the plate — the plate
@@ -465,12 +474,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         if (seeThrough && (e.banner != null || e.icon != null)) {
             h.card.setBackground(null);
         } else {
-            if (plate == null) {
-                plate = new android.graphics.drawable.GradientDrawable();
-                plate.setColor(0xFF1C1C1E);
-                plate.setCornerRadius(iconRadiusFrac
-                        * Math.min(h.card.getWidth(), h.card.getHeight()));
-            }
+            android.graphics.drawable.GradientDrawable plate =
+                    new android.graphics.drawable.GradientDrawable();
+            plate.setColor(0xFF1C1C1E);
+            plate.setCornerRadius(cornerRadius(h.card.getWidth(), h.card.getHeight(), iconRadiusFrac));
             h.card.setBackground(plate);
         }
         // Move mode: the picked-up tile fades out (it is "in hand"). The drop target needs no

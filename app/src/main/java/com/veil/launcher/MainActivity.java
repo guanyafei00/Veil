@@ -35,6 +35,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.InputType;
@@ -140,16 +141,32 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private android.widget.ImageView wallFadeView;
     /** The live Apple video video surface behind the UI; the desktop "航拍视频真播" background. */
     private SurfaceView bgVideoView;
-    /** Drives the shared VideoEngine for the desktop surface; reveals wallpaperView when playing. */
+    /** Live mirror of the engine's playing state, so still-image fades know to land back at alpha 0. */
+    private boolean videoShowing;
+    /** Drives the shared VideoEngine for the desktop surface; cross-fades the still with the video. */
     private final VideoEngine.Listener desktopVideoListener = new VideoEngine.Listener() {
         @Override
         public void onPlayingChanged(boolean playing) {
-            android.util.Log.i("Veil", "desktop onPlayingChanged " + playing
-                    + " -> video " + (playing ? "VISIBLE" : "GONE")
-                    + ", still " + (playing ? "INVISIBLE" : "VISIBLE"));
-            if (bgVideoView != null) bgVideoView.setVisibility(playing ? View.VISIBLE : View.GONE);
-            if (wallpaperView != null)
-                wallpaperView.setVisibility(playing ? View.INVISIBLE : View.VISIBLE);
+            android.util.Log.i("Veil", "desktop onPlayingChanged " + playing + " -> cross-fade");
+            videoShowing = playing;
+            if (wallpaperView == null) return;
+            // The video surface sits BEHIND the window, so fading the still's alpha is a true
+            // cross-fade on every API level — no SurfaceView-alpha quirks. When playback stops the
+            // still fades back in over black (the video goes away underneath it).
+            wallpaperView.animate().cancel();
+            if (playing) {
+                if (bgVideoView != null) bgVideoView.setVisibility(View.VISIBLE);
+                wallpaperView.setVisibility(View.VISIBLE);
+                wallpaperView.animate().alpha(0f).setDuration(900)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+            } else {
+                wallpaperView.setVisibility(View.VISIBLE);
+                wallpaperView.animate().alpha(1f).setDuration(600)
+                        .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                        .start();
+                if (bgVideoView != null) bgVideoView.setVisibility(View.GONE);
+            }
         }
 
         @Override
@@ -460,8 +477,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS));
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
+        // The dock bar (frosted band + pinned favourites row) was removed for good, so the desktop
+        // is now a plain app grid: the grid always shows on the first page (no pure-wallpaper
+        // landing) and there is never a separate dock row.
         dockVisible = prefs.isDockVisible();
-        dockBarOn = prefs.isDockBarOn();
+        dockBarOn = false;   // the dock bar (frosted band + pinned row) stays off for good
         radiusFrac = prefs.loadIconRadius() / 100f;
         dockDecoration = new DockDecoration(dockBarOn ? COLUMNS : 0, density,
                 prefs.loadDockColor(), radiusFrac);
@@ -718,7 +738,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         wallTransitioning = false;
         if (wallpaperView != null && wallFadeView != null) {
             wallpaperView.animate().cancel();
-            wallpaperView.setAlpha(1f);
+            // While the video is playing the still must stay transparent — a plain alpha=1 here
+            // would cover the live video until the next engine callback (which never comes).
+            wallpaperView.setAlpha(videoShowing ? 0f : 1f);
             wallpaperView.setScaleX(1f);
             wallpaperView.setScaleY(1f);
             android.graphics.drawable.Drawable d = wallFadeView.getDrawable();
@@ -1134,17 +1156,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int want = prefs.loadColumns(defaultColumns);
         int tint = prefs.loadDockColor();
         int radiusPct = prefs.loadIconRadius();
+        // The dock bar stays off for good, but the "show dock on first page" toggle still lives:
+        // it flips between an always-visible grid and a pure-wallpaper landing. Read it from the
+        // pref — hard-coding true here force-revealed the grid on every other settings change
+        // (the owner's "icons suddenly jump up and all show after a setting change" bug).
         boolean dockShown = prefs.isDockVisible();
-        boolean barOn = prefs.isDockBarOn();
-        // The colour, corner-radius, dock-visibility and dock-bar picks also live in the
-        // decoration/adapter, so any of them changing (panel edits land while the activity is
-        // away) forces a rebuild.
+        boolean barOn = false;
+        // The colour, corner-radius and dock-visibility picks also live in the decoration/adapter,
+        // so any of them changing (panel edits land while the activity is away) forces a rebuild.
         if (want == COLUMNS && tint == builtTint && radiusPct == builtRadiusPct
                 && dockShown == builtDockVisible && barOn == builtDockBarOn) return;
         if (want < 1 || want > 8) want = defaultColumns;   // a corrupt pref falls back to the config value
         COLUMNS = want;
         dockVisible = dockShown;
         dockBarOn = barOn;
+        gridEntered = false;   // re-establish the resting state below; the layout listener re-applies it
         radiusFrac = radiusPct / 100f;
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS));
         grid.removeItemDecoration(dockDecoration);
@@ -1708,10 +1734,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onStop() {
         super.onStop();
-        // The desktop is genuinely off screen (another app covers us, or the screen is off):
-        // the breath rests, the video tears down so it isn't decoding behind someone else.
         if (breatheAnim != null) breatheAnim.pause();
-        VideoEngine.INSTANCE.pause();
+        // Don't tear the video down while the screensaver is mirroring it. The screensaver owns
+        // the engine now (it calls useDream() + start()), and hands it back on exit via useDesktop().
+        // Pausing here would kill the clip mid-buffer and leave the saver showing only the clock on
+        // a black background — the "screensaver is all black, only the time shows" bug.
+        if (!ScreensaverActivity.showing) {
+            VideoEngine.INSTANCE.pause();
+        }
     }
 
     @Override
@@ -1795,6 +1825,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Move mode: the tile under the remote is where the picked-up app would land. The
         // glass highlight already sits on the focused tile, so no extra paint is needed.
         if (movingPkg != null) moveTargetPos = position;
+        // The focus callback can fire before the card is measured (just bound, or the calm-scroller's
+        // eventual target): width/height read 0 and the glass highlight collapsed to a dot at (0,0)
+        // (the owner's report). Wait for the next layout, then position it against real dimensions.
+        if (card.getWidth() <= 0 || card.getHeight() <= 0) {
+            card.post(() -> {
+                if (card.getWidth() <= 0 || card.getHeight() <= 0) return;
+                if (!dockVisible && grid.getTranslationY() > 1f) { focusTopBar(); return; }
+                positionGlassOnTile(position, card);
+            });
+            return;
+        }
+        positionGlassOnTile(position, card);
+    }
+
+    /** Sizes, springs and scrolls the glass highlight onto the focused tile. Call only once the
+     *  card has been measured — see {@link #onTileFocused}. */
+    private void positionGlassOnTile(int position, View card) {
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
@@ -1813,8 +1860,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The corner radius gets its own guard: the owner's icon-radius pick changes it while
         // the size stays the same, and the glow must follow the pick the moment it changes
         // (it used to sit inside the size check above and never updated — the owner's report).
-        float wantRadius = AppAdapter.cornerRadius(card.getWidth(), card.getHeight(), radiusFrac)
-                * AppAdapter.FOCUS_SCALE + pad;
+        // GlassView draws its round-rect inside a 6dp inset. The drawable rectangle therefore
+        // matches the scaled tile exactly, so its corner radius must be the tile radius scaled
+        // about the same center — do NOT add the inset to the radius. Adding it made the focus
+        // frame visibly rounder than the icon/card at small and medium radius settings.
+        float sourceRadius = AppAdapter.cornerRadius(card.getWidth(), card.getHeight(), radiusFrac);
+        float wantRadius = Math.min(sourceRadius * AppAdapter.FOCUS_SCALE, h * 0.5f - pad);
         if (Math.abs(glassRadiusPx - wantRadius) > 0.5f) {
             glassRadiusPx = wantRadius;
             glass.setRadius(wantRadius);
@@ -1843,7 +1894,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 grid.smoothScrollBy(0, dy, new android.view.animation.DecelerateInterpolator(), dur);
             }
             showHero(position, r.top - dy);
-        } else {
+        } else if (movingPkg == null) {
             // A grid tile: the tile's own label names it, so only the artwork takes over the
             // wallpaper — the app's captured content, its banner, or nothing at all. Never the icon.
             hideHeroName();
@@ -1853,6 +1904,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // itself never climbs into the clock / capsule row.
             scrollTileUnderGlass(item);
         }
+        // Move mode: the glass alone marks the drop target. Skipping the hero reload and the grid
+        // scroll here keeps the cursor glide smooth instead of reloading art on every step.
         gridEntered = true;
         fadeUnderGlass();
     }
@@ -2109,9 +2162,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- long-press menu ----------------------------------------------------------------------
 
     /**
-     * The owner's edit menu on a tile (inspired by reference launcher's live editing menu): pin to the dock or
-     * unpin, hide or show again, the system app info page, or add the app to a folder. A folder tile
-     * gets its own menu (open, rename, lock, password, delete). Edits persist in PrefsStore.
+     * Long-press on a tile: opens the tile's edit menu — a single glass popup that holds every
+     * edit action including Move (the first row). One gesture, one menu, the same look as the
+     * rest of the launcher instead of a separate pick-up step. A folder tile keeps its own menu.
      */
     @Override
     public void onTileLongPress(int position, View card) {
@@ -2121,20 +2174,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         final String pkg = adapter.pkgAt(position);
-        final String label = adapter.labelAt(position);
         if (pkg == null) return;   // quick tiles (Default home) carry no app to edit
-        boolean docked = adapter.isDockedAt(position);
-        boolean hidden = userHidden.contains(pkg);
+        // Long-press opens the full edit menu. "Move" is the first item, so picking an icon up
+        // to move it is still one step away while the other edits sit right below it.
+        showTileMenu(pkg, adapter.labelAt(position), position, card);
+    }
 
+    /**
+     * The owner's edit menu on a tile (inspired by reference launcher's live editing menu). The
+     * first row is Move — long-press still picks the icon up to move it, but it now lives inside
+     * this same glass menu alongside hide/show, the system app info page, add-to-folder, change
+     * icon, and delete. A folder tile gets its own menu (open, rename, lock, password, delete).
+     * Edits persist in PrefsStore.
+     */
+    private void showTileMenu(String pkg, String label, int anchorPos, View anchor) {
+        boolean hidden = userHidden.contains(pkg);
         List<CharSequence> options = new ArrayList<>();
         List<Runnable> actions = new ArrayList<>();
-        if (docked) {
-            options.add(getString(R.string.long_press_unpin));
-            actions.add(() -> pinApp(pkg, false));
-        } else {
-            options.add(getString(R.string.long_press_pin));
-            actions.add(() -> pinApp(pkg, true));
-        }
+        // Move is the first row: long-press still reaches it in one step, but it now lives inside
+        // the same glass menu as the other edits instead of being a separate gesture.
+        options.add(getString(R.string.long_press_move));
+        actions.add(() -> startMove(pkg));
         if (hidden) {
             options.add(getString(R.string.long_press_show));
             actions.add(() -> hideApp(pkg, false));
@@ -2156,20 +2216,77 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         actions.add(() -> showFolderPicker(pkg));
         options.add(getString(R.string.icon_change));
         actions.add(() -> showIconMenu(pkg, label));
-        // Move: the owner picks the app up, walks the remote to the wanted slot and drops it.
-        if (adapter.groupAt(position) == 3 && adapter.isPlainAppAt(position)) {
-            options.add(getString(R.string.long_press_move));
-            actions.add(() -> startMove(pkg));
-        }
         // Delete: uninstalls the app from the box (the system asks for the confirmation).
         // "Hide" stays the reversible one — this one is not.
         options.add(getString(R.string.long_press_delete));
         actions.add(() -> confirmDeleteApp(pkg, label));
 
-        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
-                .setTitle(label)
-                .setItems(options.toArray(new CharSequence[0]), (d, which) -> actions.get(which).run())
-                .create());
+        buildGlassMenu(label, anchorPos, options, actions, anchor);
+    }
+
+    /**
+     * Builds the tile edit menu as a glass popup (the same liquid-glass panel the input and card
+     * popups use), so its look matches the launcher instead of a stock AlertDialog. Rows are the
+     * focusable frosted slabs; D-pad walks them, OK runs the action, Back closes and returns focus
+     * to the tile that was long-pressed.
+     */
+    private void buildGlassMenu(String title, int anchorPos, List<CharSequence> options,
+                                List<Runnable> actions, View anchor) {
+        final float density = getResources().getDisplayMetrics().density;
+        ViewGroup root = (ViewGroup) getWindow().getDecorView();
+        View panel = getLayoutInflater().inflate(R.layout.popup_tile_menu, root, false);
+        ((TextView) panel.findViewById(R.id.title)).setText(title);
+        // Share the launcher's liquid-glass material with the settings panel via GlassSurface, so the
+        // long-press menu and the settings sheet read as one family.
+        panel.setBackground(GlassSurface.background(GlassSurface.Style.MENU, density, false));
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        final PopupWindow popup = glassPopup(panel, (int) (360 * density));
+        // Closing the menu returns focus to the originating tile (the dialog did this for free);
+        // skip it while a move is in progress — startMove will take the focus itself.
+        popup.setOnDismissListener(() -> {
+            openPopup = null;
+            if (movingPkg == null) focusTile(anchorPos);
+        });
+        for (int i = 0; i < options.size(); i++) {
+            final int idx = i;
+            View row = getLayoutInflater().inflate(R.layout.item_menu_row, rows, false);
+            // Keep the dark idle capsules visually separate. Without breathing room adjacent
+            // rounded rows merge into one scalloped blob on TV screens; Home Settings uses a
+            // 10dp row rhythm, so mirror that spacing here (no trailing gap after the last row).
+            if (row.getLayoutParams() instanceof LinearLayout.LayoutParams) {
+                LinearLayout.LayoutParams rowLp = (LinearLayout.LayoutParams) row.getLayoutParams();
+                if (i < options.size() - 1) rowLp.bottomMargin = (int) (8 * density);
+                row.setLayoutParams(rowLp);
+            }
+            ((TextView) row.findViewById(R.id.title)).setText(options.get(i));
+            row.setOnClickListener(v -> {
+                popup.dismiss();
+                actions.get(idx).run();
+            });
+            row.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    popup.dismiss();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    // A real remote repeats the key while it is held. The long-press that OPENED
+                    // this menu is still in progress when the first row takes focus, so those
+                    // repeats belong to the opening gesture — acting on one would instantly fire
+                    // the first row (Move) and the menu would flash by unseen. Only a fresh,
+                    // unrepeated press (repeatCount == 0) activates a row.
+                    if (event.getRepeatCount() > 0) return true;
+                    popup.dismiss();
+                    actions.get(idx).run();
+                    return true;
+                }
+                return false;
+            });
+            rows.addView(row);
+        }
+        dropInMenu(popup, panel, anchor);
+        // Land the focus on the first row so the remote's arrows walk the menu at once.
+        if (rows.getChildCount() > 0) rows.getChildAt(0).requestFocus();
     }
 
     // ---- move mode (the owner's own icon order) --------------------------------------------------
@@ -2211,7 +2328,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 grid.findViewHolderForAdapterPosition(pos);
         if (vh == null) return;
         View card = vh.itemView.findViewById(R.id.card);
-        if (card != null) card.setAlpha(faded ? 0.3f : 1f);
+        if (card != null) {
+            // A short, eased fade so the picked-up icon lifts and settles instead of blinking.
+            card.animate().alpha(faded ? 0.3f : 1f)
+                    .setDuration(faded ? 240 : 180)
+                    .setInterpolator(faded
+                            ? new android.view.animation.AccelerateInterpolator()
+                            : new android.view.animation.DecelerateInterpolator())
+                    .start();
+        }
     }
 
     /** Drops the picked-up app onto the tile under the focus, or puts it back (Back). */
@@ -2251,7 +2376,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         userIconOrder = order;
         prefs.saveIconOrder(order);
         adapter.setIconOrder(order);
-        reloadTiles();
+        // Animated rebuild: the icons ease into their new places instead of hard-snapping.
+        reloadApps(true);
         Toast.makeText(this, getString(R.string.move_done, target), Toast.LENGTH_SHORT).show();
     }
 
@@ -2960,6 +3086,44 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         panel.setScaleY(0.92f);
         panel.setTranslationY(-8 * density);
         popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
+        panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
+    }
+
+    /**
+     * Drop the tile long-press menu in, but keep the whole panel on screen. The anchor is a grid
+     * tile that can sit anywhere (including the bottom rows), and PopupWindow's showAsDropDown never
+     * flips — so a downward drop from a low tile pushed every row but the first off the bottom edge,
+     * making the menu look like it only had "移动". Here we measure the panel and, when it would not
+     * fit below, flip it above the tile (or clamp to the screen) so all rows stay visible.
+     */
+    private void dropInMenu(PopupWindow popup, View panel, View anchor) {
+        panel.setAlpha(0f);
+        panel.setPivotY(0f);
+        panel.setScaleY(0.92f);
+        panel.setTranslationY(-8 * density);
+        int w = (int) (360 * density);
+        panel.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int popH = panel.getMeasuredHeight();
+        int[] loc = new int[2];
+        anchor.getLocationOnScreen(loc);
+        int aTop = loc[1];
+        int aRight = loc[0] + anchor.getWidth();
+        int aBottom = loc[1] + anchor.getHeight();
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int screenH = dm.heightPixels;
+        int x = aRight - w;
+        if (x < 0) x = 0;
+        int y;
+        if (aBottom + popH <= screenH) {
+            y = aTop;                       // room below: drop under the tile
+        } else if (aTop - popH >= 0) {
+            y = aTop - popH;                // no room below: hang it above the tile
+        } else {
+            y = Math.max(0, screenH - popH); // neither fits: clamp to the bottom edge
+        }
+        popup.showAtLocation(anchor, Gravity.NO_GRAVITY, x, y);
         panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }

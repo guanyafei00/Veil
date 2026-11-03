@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deeper liquid-glass panel for the tile long-press menu: same material and hue as
+     glass_panel_light, one step more opaque so a foreground action menu keeps a little
+     more contrast — still translucent enough to read against any wallpaper. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270"
+                android:startColor="#3323262E"
+                android:endColor="#2216181E" />
+            <stroke android:width="1dp" android:color="#40FFFFFF" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <!-- top specular sheen: rounded to the panel's corners, or it would poke out of them -->
+    <item android:bottom="72dp">
+        <shape android:shape="rectangle">
+            <gradient android:angle="270"
+                android:startColor="#1FFFFFFF"
+                android:endColor="#00FFFFFF" />
+            <corners android:topLeftRadius="22dp" android:topRightRadius="22dp" />
+        </shape>
+    </item>
+</layer-list>

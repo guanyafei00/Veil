@@ -31,9 +31,12 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * One process-wide ExoPlayer that feeds BOTH the desktop video background and the video
@@ -114,6 +117,89 @@ final class VideoEngine {
     private int lastPick = -1;
     private boolean playing;
     private boolean started;
+    /**
+     * The player's shuffled playlist. Clips live IN the player as a list with REPEAT_ALL, so the
+     * transition from one aerial to the next is a decoder-level hand-off: ExoPlayer preloads the
+     * next item while the current one plays and the last frame never leaves the surface — no
+     * black gap between clips (the old setMediaItem-per-clip flow cleared the output and left the
+     * screensaver black for the whole prepare of the next clip, ~10 s on a cold CDN edge).
+     */
+    private final List<Clip> queue = new ArrayList<>();
+    /** Clips whose HTTPS form was already tried after an HTTP error — one retry each, then skip. */
+    private final Set<String> httpsTried = new HashSet<>();
+    /** The clip + transport options currently being prepared/played — the shared listener reads these. */
+    private boolean pendingViaHttp;
+    private long pendingSeekMs;
+    private long prepareBegan;
+    /** Built once and reused across every clip so a rotation never re-creates the decoder. */
+    private final Player.Listener engineListener = new Player.Listener() {
+        @Override
+        public void onPlaybackStateChanged(int state) {
+            if (player == null) return;   // released mid-flight; stale callback
+            if (state == Player.STATE_READY) {
+                main.removeCallbacks(prepareTimeout);
+                timeoutHops = 0;
+                android.util.Log.i("Veil", "video prepared in "
+                        + (SystemClock.elapsedRealtime() - prepareBegan) / 1000
+                        + "s: " + (current != null ? current.name : "?"));
+                setPlaying(true);
+                if (current != null) {
+                    WallpaperState.publish(current.url, pendingSeekMs);
+                    notifyClip(current.name);
+                }
+                main.post(positionTick);
+            } else if (state == Player.STATE_ENDED) {
+                buildQueue();   // repeat mode should prevent this; a reshuffle is a safe recovery
+            }
+        }
+
+        @Override
+        public void onMediaItemTransition(androidx.media3.common.MediaItem mediaItem, int reason) {
+            // The player moved to the next playlist item (seamless hand-off): update what "current"
+            // means so the position tick and the caption follow the new aerial.
+            int idx = player != null ? player.getCurrentMediaItemIndex() : -1;
+            if (idx >= 0 && idx < queue.size()) {
+                current = queue.get(idx);
+                prepareBegan = SystemClock.elapsedRealtime();
+                pendingSeekMs = 0L;
+                WallpaperState.publish(current.url, 0L);
+                notifyClip(current.name);
+                android.util.Log.i("Veil", "seamless transition to: " + current.name);
+            }
+        }
+
+        @Override
+        public void onPlayerError(PlaybackException e) {
+            if (player == null) return;
+            android.util.Log.w("Veil", "video error " + e.getErrorCodeName()
+                    + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s");
+            int idx = player.getCurrentMediaItemIndex();
+            Clip bad = idx >= 0 && idx < queue.size() ? queue.get(idx) : current;
+            if (bad == null) return;
+            if (!httpsTried.contains(bad.url)) {
+                // One cheap retry over HTTPS (for networks that block plain HTTP): swap the item in
+                // place and re-prepare at the same position. Only this rare error path shows a gap.
+                httpsTried.add(bad.url);
+                android.util.Log.w("Veil", "video http failed, retry over https: " + bad.name);
+                player.setMediaItem(androidx.media3.common.MediaItem.fromUri(bad.url),
+                        Math.max(0L, player.getCurrentPosition()));
+                player.setPlayWhenReady(true);
+                player.prepare();
+                prepareBegan = SystemClock.elapsedRealtime();
+                main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
+            } else {
+                // Already retried: drop the dead clip from the playlist and move on immediately.
+                android.util.Log.w("Veil", "video https also failed, dropping clip: " + bad.name);
+                int count = player.getMediaItemCount();
+                if (count > 1) {
+                    player.removeMediaItem(idx);
+                    queue.remove(idx);
+                } else {
+                    failToStill("playback error " + e.getErrorCodeName());
+                }
+            }
+        }
+    };
     /** Consecutive prepare-timeout hops without a success; caps the skip-ahead ladder. */
     private int timeoutHops;
     private final Runnable prepareTimeout = new Runnable() {
@@ -494,6 +580,11 @@ final class VideoEngine {
 
     /** Switch the rendered output to the desktop surface (dream ends / app resumes). */
     void useDesktop() {
+        // While the launcher's own screensaver is mirroring the video, it owns the engine — a stray
+        // MainActivity.onResume() (lifecycle races when the saver is launched from outside, or a brief
+        // resume while it is up) must NOT yank the output back to the desktop surface, which would
+        // leave the saver showing only its black surface while the clip decodes unseen behind it.
+        if (ScreensaverActivity.showing) return;
         dreamActive = false;
         stage = Stage.DESKTOP;
         applyStage();
@@ -573,107 +664,70 @@ final class VideoEngine {
     // ---- playback ----
 
     private void playRandom() {
-        playAnother(0);
-    }
-
-    private void playAnother(int step) {
-        int size;
-        synchronized (clipsLock) {
-            size = clips.size();
-        }
-        if (size == 0 || !started) return;
-        int pick;
-        if (step == 0) {
-            pick = size > 1 ? random.nextInt(size) : 0;
-            if (pick >= lastPick && lastPick >= 0) pick = (pick + 1) % size;
-        } else {
-            pick = ((lastPick < 0 ? 0 : lastPick) + step + size) % size;
-        }
-        lastPick = pick;
-        Clip clip;
-        synchronized (clipsLock) {
-            clip = clips.get(pick);
-        }
-        playClip(clip, 0L, true);   // plain HTTP first: the media TLS stack hangs on this CDN
+        buildQueue();
     }
 
     /**
-     * Streams {@code clip} straight from its URL. The FIRST attempt goes over plain HTTP: the
-     * Apple CDN still rate-limits some edges, and HTTP both skips one TLS round-trip and keeps
-     * the T1's native stack out of the picture entirely (ExoPlayer does its own HTTP anyway, so
-     * this is now mostly about CDN politeness). HTTPS stays as the one-shot fallback for
-     * networks that block port 80.
-     * The same stream is reused across desktop and screensaver, so there is never a second decode.
+     * Shuffles every clip into the player as ONE playlist with REPEAT_ALL, then starts at a random
+     * item. From here on the player walks the list itself and preloads each next clip in advance,
+     * so clip-to-clip transitions are seamless (see the {@code queue} field note).
      */
-    private void playClip(Clip clip, long seekMs, boolean viaHttp) {
-        if (!started) return;
-        lastPick = indexOf(clip);
-        current = clip;
-        releasePlayer();
-        final String url = viaHttp ? toHttp(clip.url) : clip.url;
-        final long prepareBegan = SystemClock.elapsedRealtime();
-        android.util.Log.i("Veil", "video prepare start: " + clip.name + (viaHttp ? " (http)" : ""));
+    private void buildQueue() {
+        List<Clip> snapshot;
+        synchronized (clipsLock) {
+            snapshot = new ArrayList<>(clips);
+        }
+        if (snapshot.isEmpty() || !started) return;
+        Collections.shuffle(snapshot, random);
+        queue.clear();
+        queue.addAll(snapshot);
+        httpsTried.clear();
+        current = snapshot.get(0);
+        lastPick = 0;
+        pendingViaHttp = true;
+        pendingSeekMs = 0L;
+        prepareBegan = SystemClock.elapsedRealtime();
+        android.util.Log.i("Veil", "video queue built: " + queue.size() + " clips");
         try {
-            DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
-                    .setAllowCrossProtocolRedirects(true)
-                    .setConnectTimeoutMs(8_000)
-                    .setReadTimeoutMs(8_000);
-            player = new ExoPlayer.Builder(ctx, new DefaultMediaSourceFactory(
-                    new DefaultDataSource.Factory(ctx, http))).build();
-            player.setVideoSurfaceHolder(dreamActive ? dreamHolder : desktopHolder);
-            player.addListener(new Player.Listener() {
-                @Override
-                public void onPlaybackStateChanged(int state) {
-                    if (player == null) return;   // released mid-flight; stale callback
-                    if (state == Player.STATE_READY) {
-                        main.removeCallbacks(prepareTimeout);
-                        timeoutHops = 0;
-                        android.util.Log.i("Veil", "video prepared in "
-                                + (SystemClock.elapsedRealtime() - prepareBegan) / 1000
-                                + "s: " + clip.name);
-                        setPlaying(true);
-                        if (current != null) {
-                            WallpaperState.publish(current.url, seekMs);
-                            notifyClip(current.name);
-                        }
-                        main.post(positionTick);
-                    } else if (state == Player.STATE_ENDED) {
-                        playAnother(1);   // roll into the next landscape
-                    }
-                }
-
-                @Override
-                public void onPlayerError(PlaybackException e) {
-                    if (player == null) return;
-                    android.util.Log.w("Veil", "video error " + e.getErrorCodeName()
-                            + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s");
-                    if (viaHttp) {
-                        // One cheap retry over HTTPS (for networks that block plain HTTP).
-                        android.util.Log.w("Veil", "video http failed, try https");
-                        playClip(clip, seekMs, false);
-                    } else {
-                        failToStill("playback error " + e.getErrorCodeName());
-                    }
-                }
-            });
-            player.setMediaItem(MediaItem.fromUri(url));
-            if (seekMs > 0) player.seekTo(seekMs);
+            if (player == null) buildPlayer();
+            List<MediaItem> items = new ArrayList<>();
+            for (Clip c : queue) items.add(MediaItem.fromUri(toHttp(c.url)));
+            player.setMediaItems(items, /* startPositionIndex= */ 0, /* startPositionMs= */ 0L);
+            player.setRepeatMode(Player.REPEAT_MODE_ALL);
             player.setPlayWhenReady(true);
             player.prepare();
+            main.removeCallbacks(prepareTimeout);
             main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
         } catch (Exception e) {
-            if (viaHttp) {
-                playClip(clip, seekMs, false);
-            } else {
-                failToStill(e.getMessage());
-            }
+            android.util.Log.w("Veil", "video queue start failed: " + e);
+            failToStill(e.getMessage());
         }
     }
 
-    private int indexOf(Clip clip) {
-        synchronized (clipsLock) {
-            return clips.indexOf(clip);
+    /**
+     * Steps to the neighbouring playlist item. Because the player preloads it while the current
+     * clip finishes, this is a decode-level hand-off — the frame never leaves the surface.
+     */
+    private void playAnother(int step) {
+        if (player == null || queue.isEmpty() || !started) {
+            buildQueue();
+            return;
         }
+        prepareBegan = SystemClock.elapsedRealtime();
+        if (step >= 0) player.seekToNextMediaItem();
+        else player.seekToPreviousMediaItem();
+    }
+
+    /** Builds the single shared ExoPlayer exactly once and wires the listener. */
+    private void buildPlayer() {
+        DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(8_000)
+                .setReadTimeoutMs(8_000);
+        player = new ExoPlayer.Builder(ctx, new DefaultMediaSourceFactory(
+                new DefaultDataSource.Factory(ctx, http))).build();
+        player.setVideoSurfaceHolder(dreamActive ? dreamHolder : desktopHolder);
+        player.addListener(engineListener);
     }
 
     private static String toHttp(String url) {

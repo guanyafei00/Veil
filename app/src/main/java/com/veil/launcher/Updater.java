@@ -52,7 +52,7 @@ final class Updater {
             "https://cdn.jsdelivr.net/gh/guanyafei00/Veil@main/update.json";
 
     /** Last-resort version code if PackageManager is unavailable (almost never used). */
-    private static final int FALLBACK_VERSION_CODE = 219;
+    private static final int FALLBACK_VERSION_CODE = 220;
 
     private static final String TAG = "Veil.Update";
     private static final long AUTO_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000; // at most once a day

@@ -6,9 +6,8 @@
         <item name="android:windowAnimationStyle">@null</item>
     </style>
 
-    <!-- Settings rides over the live desktop as a half-screen panel (floating panel style): the
-         window itself is translucent, so the desktop shows through the dimmed left half while
-         the right half carries the panel. The dim is a scrim view, not the window dimmer. -->
+    <!-- Settings rides over the live desktop as a half-screen panel: the uncovered desktop
+         remains at its original brightness, while the glass panel provides its own contrast. -->
     <style name="Theme.Veil.Settings" parent="Theme.Veil">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>

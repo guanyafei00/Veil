@@ -2,85 +2,91 @@ package com.veil.launcher;
 
 import android.app.Activity;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.format.DateFormat;
+import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.animation.Animation;
+import android.view.animation.ScaleAnimation;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Date;
-import java.util.List;
-import java.util.Random;
 
 /**
- * The launcher's own screensaver (the owner's ask): after the chosen idle minutes the home screen
- * hands the screen over to this — the cached Apple video stills and the Bing picture of the day,
- * one full-screen picture at a time, crossfaded, with a slow zoom so nothing stays still long
- * enough to burn in, and a big clock over the art like Apple's. Any key or touch ends it.
+ * The launcher's own screensaver. After the chosen idle minutes the home screen hands the display
+ * to this, and it mirrors whatever the DESKTOP is showing:
+ * <ul>
+ *   <li>Desktop wallpaper source = 航拍视频 → play the SAME aerial video (borrowing the desktop's
+ *       single shared ExoPlayer so the very same clip keeps flowing, no re-buffer, no restart).</li>
+ *   <li>Desktop wallpaper source = anything else (a photo, Bing, 360, the bundled default) → show
+ *       that SAME static wallpaper picture, with a gentle breathe, so the screensaver is a still
+ *       image exactly like the desktop.</li>
+ * </ul>
+ * A big clock sits over either, like Apple's; any key or touch ends it.
  * <p>
- * The switch, the idle minutes and the clock live in the settings panel. Off by default: a
- * screensaver nobody asked for is a screensaver that gets a launcher uninstalled.
+ * The decision is made from the persisted wallpaper source ({@link PrefsStore#loadVideoSource()}),
+ * NOT from the live engine state: when this activity launches, the home screen goes through
+ * onStop() which calls VideoEngine.pause(), so the engine reports "not started" even when the
+ * desktop was genuinely playing video. The source preference is the truthful "is the desktop
+ * video" signal.
  * <p>
  * This is deliberately NOT a DreamService: the system screensaver picker and its timeout live in
  * Settings.Secure, which an app cannot write — the owner's own switch and minutes have to run
- * inside the launcher, which is exactly where the owner looks for them. (The two DreamService
- * savers — the drifting clock and the streaming Apple videos — stay as they are.)
+ * inside the launcher. The system's own DreamService saver (VideoDream) already shares the same
+ * engine the same way.
  */
-public class ScreensaverActivity extends Activity {
-
-    /** One picture stays this long before the next fades in. */
-    private static final long SLIDE_MS = 45_000L;
-    private static final long FADE_MS = 900L;
-    /** An unreadable file is skipped in a moment, not after a whole slide. */
-    private static final long RETRY_MS = 2_000L;
-    /** The zoom across one slide: barely there, but nothing is ever perfectly still. */
-    private static final float ZOOM_TO = 1.07f;
-    /**
-     * Hard ceiling on the decoded bitmap's pixels (~1080p): a 4K panel would otherwise ask for
-     * 33 MB per picture, and the saver holds two of them plus a decode on a 1 GB box — that is
-     * how a screensaver turns black. Sources are 1080p stills, so nothing is lost here.
-     */
-    private static final int MAX_PIXELS = 2_200_000;
+public class ScreensaverActivity extends Activity implements SurfaceHolder.Callback {
 
     /** True while the screensaver is on screen; the launcher checks it before starting another. */
     static boolean showing;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final List<File> pool = new ArrayList<>();
-    private final Random rnd = new Random();
+    private final VideoEngine engine = VideoEngine.INSTANCE;
 
-    private ImageView imgA, imgB, front;
+    private SurfaceView surface;
+    private ImageView stillView;
+    /** Black curtain above the content; fades away once the still or the first video frame lands. */
+    private View fade;
     private LinearLayout clockBox;
     private TextView timeView, dateView;
     private boolean clockOn = true;
-    private int next;
-    /** The slow anti-burn-in zoom of the picture in front (its own animators, see applyPicture). */
-    private android.animation.ObjectAnimator zoomX, zoomY;
+    private boolean stopped;
+    /** True when the desktop wallpaper source is the aerial video — we mirror it with video. */
+    private boolean videoMode;
 
-    private final Runnable rotate = new Runnable() {
+    /** The engine drives our surface; the clock sits over it like Apple's. */
+    private final VideoEngine.Listener videoListener = new VideoEngine.Listener() {
         @Override
-        public void run() {
-            if (pool.isEmpty() || isDestroyed()) return;
-            if (next >= pool.size()) next = 0;
-            showNext();
+        public void onPlayingChanged(boolean playing) {
+            if (stopped || !videoMode) return;
+            // First video frame is up (or playback dropped): ease the black curtain accordingly.
+            reveal(playing);
+            clockBox.setVisibility(clockOn ? View.VISIBLE : View.GONE);
+        }
+
+        @Override
+        public void onClipResolved(String name) {
+            // The launcher's own screensaver shows no caption, unlike the system dream.
         }
     };
 
     private final Runnable clockTick = new Runnable() {
         @Override
         public void run() {
-            if (!clockOn || isDestroyed()) return;
+            if (stopped || !clockOn) return;
             timeView.setText(DateFormat.getTimeFormat(ScreensaverActivity.this).format(new Date()));
             dateView.setText(DateFormat.getMediumDateFormat(ScreensaverActivity.this).format(new Date()));
             handler.postDelayed(this, 10_000L);
@@ -100,125 +106,135 @@ public class ScreensaverActivity extends Activity {
                 | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         setContentView(R.layout.activity_screensaver);
 
-        imgA = findViewById(R.id.saverImgA);
-        imgB = findViewById(R.id.saverImgB);
-        front = imgA;
+        surface = findViewById(R.id.saverVideo);
+        stillView = findViewById(R.id.saverStill);
+        fade = findViewById(R.id.saverFade);
+        fade.setAlpha(1f);   // start covered; the still or the first video frame fades it away
         clockBox = findViewById(R.id.saverClock);
         timeView = findViewById(R.id.saverTime);
         dateView = findViewById(R.id.saverDate);
         clockOn = new PrefsStore(this).isScreensaverClockOn();
+        // Follow the desktop: video wallpaper source -> video screensaver; anything else -> the still.
+        videoMode = "video".equals(new PrefsStore(this).loadVideoSource());
+
+        // Start on the clock; the engine swaps us to video, or the still shows behind it.
         clockBox.setVisibility(clockOn ? View.VISIBLE : View.GONE);
         showing = true;
 
-        // The pool is file IO (the stills folder can hold dozens of pictures): background.
-        new Thread(() -> {
-            collectPool();
-            handler.post(() -> {
-                if (isDestroyed()) return;
-                clockTick.run();
-                if (!pool.isEmpty()) {
-                    next = rnd.nextInt(pool.size());
-                    showNext();   // schedules its own follow-up once the decode lands
-                }
-            });
-        }, "saver-pool").start();
-    }
-
-    /**
-     * The current wallpaper slot first, then the cached Bing stock and the cached video
-     * stills in a shuffled order (the stock grows on its own: one Bing picture a day).
-     */
-    private void collectPool() {
-        File dir = Config.dir(this);
-        File wall = dir != null ? new File(dir, Config.WALLPAPER_NAME) : null;
-        if (wall != null && wall.isFile() && wall.length() > 0) pool.add(wall);
-        File bing = dir != null ? new File(dir, "bing") : null;
-        File[] stock = bing != null
-                ? bing.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg")) : null;
-        if (stock != null && stock.length > 0) {
-            List<File> list = new ArrayList<>(Arrays.asList(stock));
-            Collections.shuffle(list, rnd);
-            pool.addAll(list);
+        if (videoMode) {
+            stillView.setVisibility(View.GONE);
+            // Visible from the start: a SurfaceView left GONE can skip surfaceCreated on some TV ROMs
+            // (the home screen is then black with only the clock). It paints black until the first
+            // frame arrives, which is indistinguishable from the black window background anyway.
+            surface.setVisibility(View.VISIBLE);
+            // The home screen paused the engine on its onStop(); re-bind and (re)start it into our
+            // surface so the same aerial clip flows on — without this, the screensaver would never play.
+            engine.init(this);
+            surface.getHolder().addCallback(this);
+        } else {
+            surface.setVisibility(View.GONE);
+            showDesktopStill();
         }
-        File videos = dir != null ? new File(dir, "videos") : null;
-        File[] stills = videos != null
-                ? videos.listFiles((d, n) -> n.toLowerCase().endsWith(".jpg")) : null;
-        if (stills != null && stills.length > 0) {
-            List<File> list = new ArrayList<>(Arrays.asList(stills));
-            Collections.shuffle(list, rnd);
-            pool.addAll(list);
+        clockTick.run();
+    }
+
+    /** Load the desktop's current static wallpaper (the very file the home screen shows) and breathe it. */
+    private void showDesktopStill() {
+        File wall = Config.load(this).wallpaper;
+        if (wall != null && wall.isFile() && wall.length() > 0) {
+            Bitmap bmp = decodeWallpaper(wall);
+            if (bmp != null) {
+                stillView.setImageBitmap(bmp);
+                stillView.setVisibility(View.VISIBLE);
+                ScaleAnimation breathe = new ScaleAnimation(1f, 1.06f, 1f, 1.06f,
+                        Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+                breathe.setDuration(20_000L);
+                breathe.setRepeatCount(Animation.INFINITE);
+                breathe.setRepeatMode(Animation.REVERSE);
+                stillView.startAnimation(breathe);
+                reveal(true);   // the picture is decoded: ease the curtain away
+                return;
+            }
         }
+        // No picture to show (e.g. wallpaper switched off): keep it black behind the clock.
+        stillView.setVisibility(View.GONE);
     }
 
-    /**
-     * Decodes the next picture off the main thread (a 4K still must never jank the screen it
-     * decorates) and schedules the follow-up: a full slide after a good picture, a short retry
-     * after an unreadable file so one bad JPEG cannot cost 45 seconds of black.
-     */
-    private void showNext() {
-        if (pool.isEmpty() || isDestroyed()) return;
-        final File file = pool.get(next);
-        next++;
-        new Thread(() -> {
-            final Bitmap bmp = decode(file);
-            handler.post(() -> {
-                if (isDestroyed()) return;
-                if (bmp != null) applyPicture(bmp);
-                handler.postDelayed(rotate, bmp != null ? SLIDE_MS : RETRY_MS);
-            });
-        }, "saver-decode").start();
+    /** Eases the black curtain: {@code reveal=false} fades it back in over the content. */
+    private void reveal(boolean show) {
+        if (fade == null || stopped) return;
+        fade.animate().cancel();
+        fade.setVisibility(View.VISIBLE);
+        fade.animate().alpha(show ? 0f : 1f)
+                .setDuration(show ? 900L : 500L)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator())
+                .withEndAction(() -> {
+                    if (!stopped && fade != null && fade.getAlpha() == 0f) {
+                        fade.setVisibility(View.GONE);
+                    }
+                })
+                .start();
     }
 
-    /**
-     * Crossfades to the next picture (null never reaches here: showNext filters it).
-     * <p>The fade and the slow zoom MUST ride separate animators: one ViewPropertyAnimator has a
-     * single duration, so folding the 45 s zoom into the fade's animator stretched the crossfade
-     * to 45 s as well — the old picture was gone in under a second and the new one crawled in
-     * from black for the rest of the slide (the owner's "screensaver is often black").
-     */
-    private void applyPicture(Bitmap bmp) {
-        if (bmp == null || isDestroyed()) return;
-        ImageView back = front == imgA ? imgB : imgA;
-        // The zoom from this view's last turn (two slides ago) may still be running.
-        if (zoomX != null) { zoomX.cancel(); zoomX = null; }
-        if (zoomY != null) { zoomY.cancel(); zoomY = null; }
-        back.setImageBitmap(bmp);
-        back.setScaleX(1f);
-        back.setScaleY(1f);
-        back.setAlpha(0f);
-        back.animate().cancel();
-        back.animate().alpha(1f).setDuration(FADE_MS).start();
-        front.animate().cancel();
-        front.animate().alpha(0f).setDuration(FADE_MS).start();
-        front = back;
-        zoomX = android.animation.ObjectAnimator.ofFloat(back, View.SCALE_X, 1f, ZOOM_TO);
-        zoomY = android.animation.ObjectAnimator.ofFloat(back, View.SCALE_Y, 1f, ZOOM_TO);
-        zoomX.setDuration(SLIDE_MS);
-        zoomY.setDuration(SLIDE_MS);
-        zoomX.start();
-        zoomY.start();
-    }
-
-    /** Downsampled to the screen, ARGB_8888: the 565 half-memory saving showed as sky banding. */
-    private Bitmap decode(File file) {
+    /** Downsampled decode so a 4K wallpaper never costs a giant bitmap on a 1 GB TV. */
+    private Bitmap decodeWallpaper(File f) {
         try {
-            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-            o.inJustDecodeBounds = true;
-            android.graphics.BitmapFactory.decodeFile(file.getPath(), o);
-            int sample = 1;
-            while (o.outWidth / (sample * 2) >= dm.widthPixels
-                    && o.outHeight / (sample * 2) >= dm.heightPixels) sample *= 2;
-            // Hard pixel ceiling: never hold more than ~a 1080p frame per picture on this box.
-            while (o.outWidth / sample * o.outHeight / sample > MAX_PIXELS) sample *= 2;
-            o.inJustDecodeBounds = false;
-            o.inSampleSize = sample;
-            o.inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888;   // sky banding in 565
-            return android.graphics.BitmapFactory.decodeFile(file.getPath(), o);
-        } catch (Exception | OutOfMemoryError e) {
-            android.util.Log.w("Veil", "screensaver picture unreadable: " + e);
+            BitmapFactory.Options head = new BitmapFactory.Options();
+            head.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(f.getAbsolutePath(), head);
+            DisplayMetrics dm = getResources().getDisplayMetrics();
+            int maxW = dm.widthPixels, maxH = dm.heightPixels;
+            int scale = 1;
+            while (head.outWidth / scale / 2 >= maxW && head.outHeight / scale / 2 >= maxH) scale *= 2;
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = scale;
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+            return BitmapFactory.decodeFile(f.getAbsolutePath(), opts);
+        } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public void surfaceCreated(SurfaceHolder h) {
+        if (!videoMode) return;
+        // Take over the shared player's output from the desktop — same clip, no restart — and
+        // (re)start playback, because onStop() paused the engine before we got here.
+        engine.setDreamHolder(h, videoListener);
+        engine.useDream();
+        engine.start();
+    }
+
+    @Override
+    public void surfaceChanged(SurfaceHolder h, int format, int width, int height) {
+    }
+
+    @Override
+    public void surfaceDestroyed(SurfaceHolder h) {
+        if (videoMode) engine.clearDreamHolder();
+    }
+
+    @Override
+    protected void onDestroy() {
+        stopped = true;
+        showing = false;
+        handler.removeCallbacks(clockTick);
+        if (videoMode) {
+            // Hand the output back to the desktop so the video flows on without restarting.
+            // (MainActivity.onResume also calls engine.useDesktop(), this just makes it immediate.)
+            engine.useDesktop();
+            engine.clearDreamHolder();
+        }
+        // Free the still bitmap we decoded.
+        if (stillView != null) {
+            stillView.clearAnimation();
+            if (stillView.getDrawable() instanceof BitmapDrawable) {
+                Bitmap b = ((BitmapDrawable) stillView.getDrawable()).getBitmap();
+                stillView.setImageDrawable(null);
+                if (b != null) b.recycle();
+            }
+        }
+        super.onDestroy();
     }
 
     @Override
@@ -235,15 +251,5 @@ public class ScreensaverActivity extends Activity {
     public boolean onTouchEvent(MotionEvent event) {
         finish();
         return true;
-    }
-
-    @Override
-    protected void onDestroy() {
-        showing = false;
-        handler.removeCallbacks(rotate);
-        handler.removeCallbacks(clockTick);
-        if (zoomX != null) zoomX.cancel();
-        if (zoomY != null) zoomY.cancel();
-        super.onDestroy();
     }
 }

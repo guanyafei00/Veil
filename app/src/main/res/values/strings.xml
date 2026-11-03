@@ -114,9 +114,6 @@
     <string name="lock_off">Launcher lock is off</string>
     <string name="guard_on">Launcher guard is on</string>
     <string name="guard_off">Launcher guard is off</string>
-    <string name="liquid_glass">Liquid glass UI</string>
-    <string name="liquid_glass_on">Liquid glass is on</string>
-    <string name="liquid_glass_off">Liquid glass is off</string>
     <string name="lock_guide_title">Enable the accessibility service</string>
     <string name="lock_guide_message">The lock works through an accessibility service. Open system Accessibility settings, find "Launcher lock" and turn it on. While locked, the system Settings app and the stock launcher bounce straight back to this home screen, so the desktop cannot be replaced, reset or uninstalled. Normal apps are not affected.</string>
     <string name="lock_go_accessibility">Open accessibility settings</string>
@@ -127,9 +124,9 @@
     <string name="desktop_entry">Veil desktop</string>
 
     <!-- Settings panel: dock size, wallpaper, system settings shortcut. -->
-    <string name="panel_columns">Dock size</string>
+    <string name="panel_columns">Icons per row</string>
     <string name="columns_fmt">%1$d tiles per row</string>
-    <string name="columns_done">Dock size set to %1$d — back out to the desktop to apply</string>
+    <string name="columns_done">%1$d tiles per row — back out to the desktop to apply</string>
     <string name="panel_wallpaper">Wallpaper</string>
     <string name="wallpaper_pick">Pick a picture</string>
     <string name="wallpaper_reset">Back to plain black</string>
@@ -239,6 +236,8 @@
     <string name="sec_bing">BING WALLPAPERS</string>
     <string name="sec_w360">360 GALLERY</string>
     <string name="sec_diag">DIAGNOSTICS</string>
+    <string name="sec_appearance">APPEARANCE</string>
+    <string name="sec_others">OTHERS</string>
 
     <!-- The wallpaper gallery: one source's picture pool, seen and picked from. -->
     <string name="gallery_open">Picture gallery</string>

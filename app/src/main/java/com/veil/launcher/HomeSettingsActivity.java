@@ -34,7 +34,7 @@ import java.util.Set;
 
 /**
  * The launcher's settings, floating panel style: a half-screen panel on the right that rides over
- * the live desktop (the window is translucent, the left half is a dimmed scrim), never covering
+ * the live desktop (the window is translucent, with no scrim over the uncovered desktop), never covering
  * the whole screen. Level one is the category list (desktop / wallpaper / screensaver / clock /
  * settings); picking one opens level two — that category's rows — and Back returns to the list.
  * Rows are built in code — one helper, no button IDs — and every row reuses the dialogs this
@@ -52,12 +52,13 @@ public class HomeSettingsActivity extends Activity {
     private int activeCategory = -1;
 
     private static final int PAGE_BG = 0xF60D0D10;
-    private static final int ROW_BG = 0xFF1B1B20;
+    // Translucent charcoal glass: restore the earlier long-press menu material, but keep it
+    // lighter so the rows sit over any wallpaper without reading as black slabs.
+    private static final int ROW_BG = 0x4023262E;
     private static final int CARD_BG = 0xFFF5F5F7;
     private static final int LABEL_COLOR = 0xFFF2F2F4;
     private static final int VALUE_COLOR = 0xFF98989F;
     private static final int HEADER_COLOR = 0xFF7C7C85;
-    private static final int SCRIM = 0x8C000000;
 
     private static final int[] CATEGORIES = {
             R.string.section_desk, R.string.section_wallpaper, R.string.section_screensaver,
@@ -66,10 +67,10 @@ public class HomeSettingsActivity extends Activity {
 
     // Values that refresh when a dialog changes a pref; rebuilt per category, so every access
     // is null-guarded (a row that was never built simply has no live TextView).
-    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, liquidGlassValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, videoValue,
+    private TextView lockValue, lockServiceValue, guardValue, guardServiceValue, systemHomeValue, weatherValue, unitValue, h24Value, bingValue, videoValue,
             bingRotateValue, videoExpandValue, videoResValue, videoSourceValue,
             w360CatValue, w360ExpandValue, w360RotateValue,
-            dockColorValue, radiusValue, columnsValue, dockVisibleValue, dockBarValue, dockFrostValue, heroArtValue,
+            radiusValue, columnsValue, heroArtValue, dockVisibleValue,
             topBarColorValue, topTextColorValue,
             screensaverValue, screensaverDelayValue, screensaverClockValue, previewValue;
     /** Update rows: the installed version, the auto-check toggle, and the manifest URL. */
@@ -82,33 +83,23 @@ public class HomeSettingsActivity extends Activity {
         float d = getResources().getDisplayMetrics().density;
         int screenW = getResources().getDisplayMetrics().widthPixels;
 
-        // The dimmed desktop behind: the window is translucent (Theme.Veil.Settings), this
-        // scrim keeps the left half readable without hiding the wallpaper.
+        // Keep the uncovered desktop at its original brightness; only the glass panel itself
+        // provides contrast for the settings content.
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(SCRIM);
+        root.setBackgroundColor(android.graphics.Color.TRANSPARENT);
 
-        // The panel: the right half of the screen, rounded on its left edge only.
+        // The panel: the right half of the screen, rounded on its left edge only. It shares the
+        // launcher's liquid-glass material with the long-press menu via GlassSurface.
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(screenW / 2,
                 ViewGroup.LayoutParams.MATCH_PARENT);
         plp.gravity = Gravity.END;
         panel.setLayoutParams(plp);
-        GradientDrawable panelBg = new GradientDrawable();
-        float r = 28 * d;
-        if (prefs.isLiquidGlassOn() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Apple-style frosted panel: the live desktop shows through, genuinely blurred behind it.
-            // Panel stays dark smoked glass in both moods: every label on it is white, a
-            // light day panel would erase the contrast. Day/night lives on the dock frost.
-            panelBg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
-            panelBg.setColors(new int[]{0x4D23262E, 0x3A16181E});
-            panelBg.setStroke(1, 0x42FFFFFF);
-            getWindow().setBackgroundBlurRadius(110);
-        } else {
-            panelBg.setColor(PAGE_BG);
-        }
-        panelBg.setCornerRadii(new float[]{r, r, 0, 0, 0, 0, r, r});
-        panel.setBackground(panelBg);
+        // Liquid glass is fixed on: the settings sheet uses the same translucent smoked sheet and
+        // light edge as the tile menu, plus a native backdrop blur on API 31+.
+        panel.setBackground(GlassSurface.background(GlassSurface.Style.SETTINGS, d, true));
+        GlassSurface.applyWindowBlur(getWindow(), GlassSurface.Style.SETTINGS);
         panel.setPadding((int) (28 * d), (int) (26 * d), (int) (22 * d), (int) (22 * d));
         panel.setClipToPadding(false);
 
@@ -317,9 +308,10 @@ public class HomeSettingsActivity extends Activity {
     // ---- level two: one category's rows ----------------------------------------------------------
 
     private void buildDeskRows() {
-        row(getString(R.string.panel_columns), columnsValue = new TextView(this), v -> showColumnsDialog());
-        row(getString(R.string.panel_dock_color), dockColorValue = new TextView(this), v -> pickColor(R.string.panel_dock_color, prefs.loadDockColor(), c -> prefs.saveDockColor(c)));
-        row(getString(R.string.panel_icon_radius), radiusValue = new TextView(this), v -> showIconRadiusDialog());
+        // The dock bar is gone for good (its glass band, pinned row and every dock setting were
+        // removed): the desktop is now just a clean app grid over the wallpaper. What remains here
+        // is the small set of appearance and utility toggles, grouped so the panel reads top-down.
+        sectionHeader(getString(R.string.sec_appearance));
         row(getString(R.string.panel_dock_visible), dockVisibleValue = new TextView(this), v -> {
             boolean on = !prefs.isDockVisible();
             prefs.setDockVisible(on);
@@ -327,20 +319,8 @@ public class HomeSettingsActivity extends Activity {
             Toast.makeText(this, on ? R.string.dock_visible_on : R.string.dock_visible_off,
                     Toast.LENGTH_SHORT).show();
         });
-        row(getString(R.string.panel_dock_bar), dockBarValue = new TextView(this), v -> {
-            boolean on = !prefs.isDockBarOn();
-            prefs.setDockBarOn(on);
-            refreshValues();
-            Toast.makeText(this, on ? R.string.dock_bar_on : R.string.dock_bar_off,
-                    Toast.LENGTH_SHORT).show();
-        });
-        row(getString(R.string.panel_dock_frost), dockFrostValue = new TextView(this), v -> {
-            boolean on = !prefs.isDockFrostOn();
-            prefs.setDockFrostOn(on);
-            refreshValues();
-            Toast.makeText(this, on ? R.string.dock_frost_on : R.string.dock_frost_off,
-                    Toast.LENGTH_SHORT).show();
-        });
+        row(getString(R.string.panel_columns), columnsValue = new TextView(this), v -> showColumnsDialog());
+        row(getString(R.string.panel_icon_radius), radiusValue = new TextView(this), v -> showIconRadiusDialog());
         row(getString(R.string.panel_hero_art), heroArtValue = new TextView(this), v -> {
             boolean on = !prefs.isHeroArtOn();
             prefs.setHeroArtOn(on);
@@ -355,11 +335,8 @@ public class HomeSettingsActivity extends Activity {
             Toast.makeText(this, on ? R.string.preview_on : R.string.preview_off,
                     Toast.LENGTH_SHORT).show();
         });
+        sectionHeader(getString(R.string.sec_others));
         row(getString(R.string.manage_hidden), null, v -> showHidden());
-        row(getString(R.string.dock_reset), null, v -> {
-            prefs.clearDock();
-            Toast.makeText(this, R.string.dock_reset_done, Toast.LENGTH_LONG).show();
-        });
     }
 
     /**
@@ -494,9 +471,6 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.guard_button), guardValue = new TextView(this), v -> toggleGuard());
         row(getString(R.string.guard_service), guardServiceValue = new TextView(this),
                 v -> openAccessibilitySettings());
-        // Liquid-glass UI (the owner's step-2 ask): frosted material + real backdrop blur where the
-        // box supports it; off falls back to the plain panel.
-        row(getString(R.string.liquid_glass), liquidGlassValue = new TextView(this), v -> toggleLiquidGlass());
         row(getString(R.string.backup), null, v -> backup());
         row(getString(R.string.restore), null, v -> restore());
         row(getString(R.string.panel_control), null, v -> showControlCenter());
@@ -608,13 +582,10 @@ public class HomeSettingsActivity extends Activity {
     /** Fills the right-hand "current value" text of every dynamic row from the prefs. */
     private void refreshValues() {
         set(columnsValue, getString(R.string.columns_fmt, prefs.loadColumns(Config.load(this).columns)));
-        set(dockColorValue, colorName(prefs.loadDockColor()));
+        set(dockVisibleValue, prefs.isDockVisible() ? "开" : "关");
         set(topBarColorValue, colorName(prefs.loadTopBarColor()));
         set(topTextColorValue, colorName(prefs.loadTopTextColor()));
         set(radiusValue, radiusName());
-        set(dockVisibleValue, prefs.isDockVisible() ? "开" : "关");
-        set(dockBarValue, prefs.isDockBarOn() ? "开" : "关");
-        set(dockFrostValue, prefs.isDockFrostOn() ? "开" : "关");
         set(heroArtValue, prefs.isHeroArtOn() ? "开" : "关");
         set(bingValue, prefs.isBingWallpaperOn() ? getString(R.string.enabled_suffix).replace("（", "").replace("）", "") : "关");
         File base = Config.dir(this);
@@ -649,7 +620,6 @@ public class HomeSettingsActivity extends Activity {
         set(guardValue, prefs.isGuardEnabled() ? "开" : "关");
         set(guardServiceValue, guardServiceEnabled()
                 ? getString(R.string.guard_service_on) : getString(R.string.guard_service_off));
-        set(liquidGlassValue, prefs.isLiquidGlassOn() ? "开" : "关");
         set(systemHomeValue, isDefaultHome()
                 ? getString(R.string.system_home_is_default) : getString(R.string.system_home_not_default));
         set(screensaverValue, prefs.isScreensaverOn() ? "开" : "关");
@@ -1122,13 +1092,6 @@ public class HomeSettingsActivity extends Activity {
     }
 
     /** Flips the liquid-glass UI (needs a settings reopen to re-apply the panel blur). */
-    private void toggleLiquidGlass() {
-        boolean on = !prefs.isLiquidGlassOn();
-        prefs.setLiquidGlassOn(on);
-        Toast.makeText(this, on ? R.string.liquid_glass_on : R.string.liquid_glass_off, Toast.LENGTH_SHORT).show();
-        refreshValues();
-    }
-
     /** The lock only bites once the LockService accessibility service is enabled in system settings. */
     private void showLockGuide() {
         Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)

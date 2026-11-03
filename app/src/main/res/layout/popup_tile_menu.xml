@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tile long-press menu: the same liquid-glass panel as the input/card popups, so the edit
+     menu matches the launcher's overall look instead of a solid stock dialog. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/panel"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@android:color/transparent"
+    android:padding="6dp"
+    android:elevation="12dp">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp"
+        android:textColor="#8CFFFFFF"
+        android:textSize="11sp"
+        android:fontFamily="sans-serif"
+        android:fontVariationSettings="'wght' 500"
+        android:letterSpacing="0.18"
+        android:textAllCaps="true"
+        android:singleLine="true"
+        android:ellipsize="end" />
+
+    <LinearLayout
+        android:id="@+id/rows"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+</LinearLayout>

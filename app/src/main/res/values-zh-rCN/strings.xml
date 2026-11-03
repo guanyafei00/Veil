@@ -91,10 +91,10 @@
     <string name="lock_service_description">桌面锁定开启时，把系统设置和原装桌面自动弹回本桌面，防止默认桌面被更换或卸载。</string>
     <string name="desktop_entry">Veil 桌面</string>
 
-    <!-- 设置面板：程序坞数量、壁纸、系统设置。 -->
-    <string name="panel_columns">程序坞数量</string>
+    <!-- 设置面板：每行图标数量、壁纸、系统设置。 -->
+    <string name="panel_columns">每行图标</string>
     <string name="columns_fmt">每行 %1$d 个</string>
-    <string name="columns_done">程序坞已设为每行 %1$d 个，返回桌面即生效</string>
+    <string name="columns_done">已设为每行 %1$d 个，返回桌面即生效</string>
     <string name="panel_wallpaper">更换壁纸</string>
     <string name="wallpaper_pick">选择图片</string>
     <string name="wallpaper_reset">恢复纯黑背景</string>
@@ -204,6 +204,8 @@
     <string name="sec_bing">必应壁纸</string>
     <string name="sec_w360">360 图库</string>
     <string name="sec_diag">网络诊断</string>
+    <string name="sec_appearance">外观</string>
+    <string name="sec_others">其它</string>
 
     <!-- 壁纸画廊：单个图源的图片库，可看可挑。 -->
     <string name="gallery_open">图库预览</string>
@@ -279,9 +281,6 @@
     <string name="guard_service_name">桌面守护</string>
     <string name="guard_service_off">未授权 — 点此开启</string>
     <string name="guard_service_on">运行中</string>
-    <string name="liquid_glass">液态玻璃</string>
-    <string name="liquid_glass_off">液态玻璃已关闭</string>
-    <string name="liquid_glass_on">液态玻璃已开启</string>
     <!-- 遥控器按键 / 系统 -->
     <string name="home_key_description">让遥控器的主页键打开本桌面。</string>
     <string name="home_key_name">遥控器主页键</string>

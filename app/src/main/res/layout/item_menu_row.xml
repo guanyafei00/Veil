@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One row of the tile long-press menu: the same frosted focus-slab look as the input/card
+     popups (transparent at rest, lit glass slab on focus), so the menu reads as part of the
+     launcher instead of a stock Android dialog. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="48dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp"
+    android:background="@drawable/input_row_bg"
+    android:focusable="true"
+    android:clickable="true">
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@drawable/pill_text"
+        android:duplicateParentState="true"
+        android:textSize="15sp"
+        android:fontFamily="sans-serif"
+        android:fontVariationSettings="'wght' 500"
+        android:singleLine="true"
+        android:ellipsize="end" />
+</LinearLayout>
