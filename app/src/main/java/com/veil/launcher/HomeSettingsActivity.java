@@ -73,6 +73,8 @@ public class HomeSettingsActivity extends Activity {
             radiusValue, columnsValue, heroArtValue, dockVisibleValue,
             topBarColorValue, topTextColorValue,
             screensaverValue, screensaverDelayValue, screensaverClockValue, previewValue;
+    /** Custom video source rows: the local-files count and the custom-URL count. */
+    private TextView localVideoValue, customUrlValue;
     /** Update rows: the installed version, the auto-check toggle, and the manifest URL. */
     private TextView checkUpdateValue, updateAutoValue, updateUrlValue;
 
@@ -173,6 +175,86 @@ public class HomeSettingsActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    // ---- custom video sources -------------------------------------------------------------------
+
+    /** Rescans /sdcard/Veil/videos and merges the found files into the aerial playlist. */
+    private void scanLocalVideos() {
+        VideoEngine engine = VideoEngine.INSTANCE;
+        if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+            return;
+        }
+        int n = engine.scanLocalVideos();
+        if (n < 0) {
+            Toast.makeText(this, R.string.local_scan_denied, Toast.LENGTH_LONG).show();
+        } else if (n == 0) {
+            Toast.makeText(this, R.string.local_scan_empty, Toast.LENGTH_LONG).show();
+        } else {
+            Toast.makeText(this, getString(R.string.local_scan_found, n), Toast.LENGTH_SHORT).show();
+        }
+        refreshCustomCounts();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        if (code == 1 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+            scanLocalVideos();
+        }
+    }
+
+    /** Adds one direct video URL (Pexels, a NAS stream, an exported Wallpaper Engine mp4...) to the playlist. */
+    private void showAddVideoUrlDialog() {
+        final EditText input = new EditText(this);
+        input.setSingleLine();
+        input.setHint(R.string.custom_url_hint);
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
+                .setTitle(R.string.custom_url_add)
+                .setView(input)
+                .setPositiveButton(R.string.btn_save, (d, which) -> {
+                    String u = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (!u.startsWith("http://") && !u.startsWith("https://") && !u.startsWith("/")) {
+                        Toast.makeText(this, R.string.custom_url_invalid, Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    java.util.Set<String> urls = prefs.loadCustomVideoUrls();
+                    urls.add(u);
+                    prefs.saveCustomVideoUrls(urls);
+                    VideoEngine.INSTANCE.setCustomUrls(urls);
+                    refreshCustomCounts();
+                    Toast.makeText(this, R.string.custom_url_added, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create());
+    }
+
+    /** Clears every custom video URL (local files are untouched — they live in the folder). */
+    private void confirmClearCustomUrls() {
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
+                .setTitle(R.string.custom_url_clear)
+                .setMessage(R.string.confirm_clear_urls)
+                .setPositiveButton(R.string.btn_save, (d, which) -> {
+                    prefs.saveCustomVideoUrls(new java.util.LinkedHashSet<>());
+                    VideoEngine.INSTANCE.setCustomUrls(new java.util.LinkedHashSet<>());
+                    refreshCustomCounts();
+                    Toast.makeText(this, R.string.custom_cleared, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .create());
+    }
+
+    private void refreshCustomCounts() {
+        if (localVideoValue != null) {
+            int n = VideoEngine.INSTANCE.localVideoCount();
+            localVideoValue.setText(n > 0 ? String.valueOf(n) : getString(R.string.value_none));
+        }
+        if (customUrlValue != null) {
+            int n = VideoEngine.INSTANCE.customUrlCount();
+            customUrlValue.setText(n > 0 ? String.valueOf(n) : getString(R.string.value_none));
+        }
     }
 
     // ---- level one: the category list ------------------------------------------------------------
@@ -354,6 +436,12 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.video_source), videoSourceValue = new TextView(this), v -> showVideoSourceDialog());
         row(getString(R.string.video_res), videoResValue = new TextView(this), v -> showVideoResDialog());
         row(getString(R.string.video_expand), videoExpandValue = new TextView(this), v -> showVideoExpandDialog());
+
+        section(getString(R.string.sec_custom_video));
+        row(getString(R.string.local_videos), localVideoValue = new TextView(this), v -> scanLocalVideos());
+        row(getString(R.string.custom_url_add), customUrlValue = new TextView(this), v -> showAddVideoUrlDialog());
+        row(getString(R.string.qr_video_add), null, v -> showQrVideoUrl());
+        row(getString(R.string.custom_url_clear), null, v -> confirmClearCustomUrls());
 
         section(getString(R.string.sec_bing));
         row(getString(R.string.gallery_open), null, v -> openGallery(WallpaperStock.Source.BING));
@@ -906,6 +994,56 @@ public class HomeSettingsActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
                 .setTitle(R.string.scan_upload)
+                .setView(box)
+                .setPositiveButton(android.R.string.ok, null)
+                .setOnDismissListener(d -> server.stop())
+                .create());
+    }
+
+    /** QR-code video-URL entry: the phone scans, opens the page, pastes a direct link, POSTs it. */
+    private void showQrVideoUrl() {
+        String token = String.format(java.util.Locale.US, "%08d",
+                new java.util.Random().nextInt(100000000));
+        WallpaperServer server = new WallpaperServer(this, token, null, url -> {
+            java.util.Set<String> urls = prefs.loadCustomVideoUrls();
+            urls.add(url);
+            prefs.saveCustomVideoUrls(urls);
+            VideoEngine.INSTANCE.setCustomUrls(urls);
+            refreshCustomCounts();
+            Toast.makeText(this, R.string.custom_url_added, Toast.LENGTH_LONG).show();
+        });
+        String url = server.start();
+        if (url == null) {
+            Toast.makeText(this, R.string.scan_upload_fail, Toast.LENGTH_LONG).show();
+            return;
+        }
+        Bitmap qr;
+        try {
+            qr = QrCode.encode(url, 8);
+        } catch (IllegalArgumentException tooLong) {
+            server.stop();
+            Toast.makeText(this, R.string.scan_upload_fail, Toast.LENGTH_LONG).show();
+            return;
+        }
+        int pad = (int) (24 * getResources().getDisplayMetrics().density);
+        ImageView image = new ImageView(this);
+        image.setImageBitmap(qr);
+        image.setPadding(pad, pad, pad, pad / 2);
+        TextView hint = new TextView(this);
+        hint.setText(getString(R.string.qr_video_hint, url));
+        hint.setTextColor(0xFFB9B9C2);
+        hint.setTextSize(14);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(pad, 0, pad, pad);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+        box.addView(image, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        box.addView(hint, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        Dialogs.show(new AlertDialog.Builder(this, R.style.VeilDialog)
+                .setTitle(R.string.qr_video_add)
                 .setView(box)
                 .setPositiveButton(android.R.string.ok, null)
                 .setOnDismissListener(d -> server.stop())

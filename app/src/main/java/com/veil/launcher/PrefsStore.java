@@ -77,6 +77,8 @@ final class PrefsStore {
     private static final String KEY_W360_CURSOR_PREFIX = "w360_cursor_";
     private static final String KEY_VIDEO_USED_URLS = "video_used_urls";
     private static final String KEY_VIDEO_STILL_RES = "video_still_res";
+    /** The owner's own video URLs (settings panel), merged into the aerial playlist. */
+    private static final String KEY_CUSTOM_VIDEO_URLS = "custom_video_urls";
     /** Video expansion source: auto | apple | wallhaven | w360 | video (the owner's manual override). */
     private static final String KEY_VIDEO_SOURCE = "video_source";
     /** First page shows the dock row (off = pure wallpaper page, the dock apps join the grid). */
@@ -579,6 +581,16 @@ final class PrefsStore {
         java.util.Set<String> used = new java.util.HashSet<>(loadVideoUsedUrls());
         used.add(basename);
         sp.edit().putStringSet(KEY_VIDEO_USED_URLS, used).apply();
+    }
+
+    /** The owner's own video URLs, empty when none were added yet. */
+    java.util.Set<String> loadCustomVideoUrls() {
+        java.util.Set<String> s = sp.getStringSet(KEY_CUSTOM_VIDEO_URLS, null);
+        return s == null ? new java.util.LinkedHashSet<>() : new java.util.LinkedHashSet<>(s);
+    }
+
+    void saveCustomVideoUrls(java.util.Set<String> urls) {
+        sp.edit().putStringSet(KEY_CUSTOM_VIDEO_URLS, new java.util.HashSet<>(urls)).apply();
     }
 
     /** Video still resolution: 0 = follow the display, else force 1080 / 2160. */

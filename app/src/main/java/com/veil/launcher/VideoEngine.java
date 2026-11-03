@@ -67,6 +67,8 @@ final class VideoEngine {
     private static final long PREPARE_TIMEOUT_MS = 30_000L;
     /** Wait this long after a failure before retrying the network. */
     private static final long RETRY_MS = 30_000L;
+    /** Consecutive playback errors with no successful prepare in between → whole-network outage. */
+    private static final int MAX_ERROR_STREAK = 5;
     /** How often we sample the playback position for diagnostics. */
     private static final long POSITION_TICK_MS = 5_000L;
     /** Network timeouts for the live catalog fetch. */
@@ -105,6 +107,10 @@ final class VideoEngine {
     /** The clips adopted from the live manifest (or its cache) — the auto-updated part. */
     private final List<Clip> cachedClips = new ArrayList<>();
     private final Object clipsLock = new Object();
+    /** Local video files (sdcard/Veil/videos) — scanned from the settings panel. */
+    private final List<Clip> localClips = new ArrayList<>();
+    /** The owner's own video URLs (settings panel) — merged into the playlist. */
+    private final List<Clip> urlClips = new ArrayList<>();
 
     private Context ctx;
     private File catalogCache;
@@ -139,6 +145,7 @@ final class VideoEngine {
             if (state == Player.STATE_READY) {
                 main.removeCallbacks(prepareTimeout);
                 timeoutHops = 0;
+                errorStreak = 0;
                 android.util.Log.i("Veil", "video prepared in "
                         + (SystemClock.elapsedRealtime() - prepareBegan) / 1000
                         + "s: " + (current != null ? current.name : "?"));
@@ -171,29 +178,48 @@ final class VideoEngine {
         @Override
         public void onPlayerError(PlaybackException e) {
             if (player == null) return;
+            errorStreak++;
+            if (errorStreak >= MAX_ERROR_STREAK) {
+                // The whole network is down (not one bad clip): stop churning through the
+                // playlist one drop at a time and fall back until the retry timer.
+                failToStill(e.getErrorCodeName() + " x" + errorStreak);
+                return;
+            }
             android.util.Log.w("Veil", "video error " + e.getErrorCodeName()
-                    + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s");
+                    + " after " + (SystemClock.elapsedRealtime() - prepareBegan) / 1000 + "s"
+                    + " (streak " + errorStreak + ")");
             int idx = player.getCurrentMediaItemIndex();
             Clip bad = idx >= 0 && idx < queue.size() ? queue.get(idx) : current;
             if (bad == null) return;
-            if (!httpsTried.contains(bad.url)) {
-                // One cheap retry over HTTPS (for networks that block plain HTTP): swap the item in
-                // place and re-prepare at the same position. Only this rare error path shows a gap.
+            // One cheap retry over the other transport (TLS cert failures on some CDN edges,
+            // networks that block plain HTTP): swap the item in place via replaceMediaItem and
+            // re-prepare. NOTE: setMediaItem here would WIPE the whole playlist down to one
+            // item, and the next failure would then read count==1 and tear the engine down
+            // over a single network blip.
+            if (!httpsTried.contains(bad.url) && bad.url.startsWith("http")) {
                 httpsTried.add(bad.url);
-                android.util.Log.w("Veil", "video http failed, retry over https: " + bad.name);
-                player.setMediaItem(androidx.media3.common.MediaItem.fromUri(bad.url),
-                        Math.max(0L, player.getCurrentPosition()));
+                String alt = bad.url.startsWith("https://")
+                        ? toHttp(bad.url)
+                        : bad.url.replaceFirst("^http://", "https://");
+                android.util.Log.w("Veil", "video transport failed, retrying over "
+                        + (alt.startsWith("https") ? "https" : "http") + ": " + bad.name);
+                player.replaceMediaItem(idx, androidx.media3.common.MediaItem.fromUri(
+                        playable(alt)));
                 player.setPlayWhenReady(true);
                 player.prepare();
                 prepareBegan = SystemClock.elapsedRealtime();
+                main.removeCallbacks(prepareTimeout);
                 main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
             } else {
-                // Already retried: drop the dead clip from the playlist and move on immediately.
-                android.util.Log.w("Veil", "video https also failed, dropping clip: " + bad.name);
+                // Already retried on the other transport: drop the dead clip and move on.
+                android.util.Log.w("Veil", "video retry also failed, dropping clip: " + bad.name);
                 int count = player.getMediaItemCount();
                 if (count > 1) {
                     player.removeMediaItem(idx);
                     queue.remove(idx);
+                    prepareBegan = SystemClock.elapsedRealtime();
+                    main.removeCallbacks(prepareTimeout);
+                    main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
                 } else {
                     failToStill("playback error " + e.getErrorCodeName());
                 }
@@ -202,6 +228,8 @@ final class VideoEngine {
     };
     /** Consecutive prepare-timeout hops without a success; caps the skip-ahead ladder. */
     private int timeoutHops;
+    /** Consecutive playback errors since the last successful prepare — network-outage detector. */
+    private int errorStreak;
     private final Runnable prepareTimeout = new Runnable() {
         @Override
         public void run() {
@@ -230,6 +258,8 @@ final class VideoEngine {
         loadPlaylist();   // bundled fallback (Apple's public Aerial CDN URLs)
         catalogCache = new File(this.ctx.getCacheDir(), "veil_catalog.json");
         loadCachedCatalog();   // if we fetched a live list before, reuse it offline
+        scanLocalVideos();   // pick up /sdcard/Veil/videos files right away (needs storage grant)
+        setCustomUrls(new PrefsStore(ctx).loadCustomVideoUrls());
         refreshCatalogAsync(); // try to auto-update to Apple's current catalog right now
     }
 
@@ -546,6 +576,136 @@ final class VideoEngine {
         }
     }
 
+    // ---- custom video sources (local files + the owner's own URLs) -------------------------------
+
+    /** Where the owner drops video files: /sdcard/Veil/videos (push via adb, USB manager, LocalSend). */
+    static File localVideoDir() {
+        return new File(android.os.Environment.getExternalStorageDirectory(), "Veil/videos");
+    }
+
+    private static final String[] VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".mov", ".m4v"};
+
+    /**
+     * Rescans the local video folder and returns how many playable files were found, or -1 when
+     * the folder cannot be read (no storage permission / no storage). Local clips keep the
+     * playlist position of the catalogue: they are merged in alongside the aerials.
+     */
+    int scanLocalVideos() {
+        File dir = localVideoDir();
+        List<Clip> found = new ArrayList<>();
+        File[] files = dir.listFiles();
+        if (files == null) return -1;
+        java.util.Arrays.sort(files);
+        for (File f : files) {
+            if (!f.isFile()) continue;
+            String n = f.getName().toLowerCase(java.util.Locale.US);
+            for (String ext : VIDEO_EXTENSIONS) {
+                if (n.endsWith(ext)) {
+                    found.add(new Clip(f.getName(), f.getAbsolutePath()));
+                    break;
+                }
+            }
+        }
+        synchronized (clipsLock) {
+            localClips.clear();
+            localClips.addAll(found);
+        }
+        android.util.Log.i("Veil", "local video scan: " + found.size() + " files in " + dir);
+        syncCustomClips();
+        return found.size();
+    }
+
+    int localVideoCount() {
+        synchronized (clipsLock) {
+            return localClips.size();
+        }
+    }
+
+    int customUrlCount() {
+        synchronized (clipsLock) {
+            return urlClips.size();
+        }
+    }
+
+    /** Replaces the custom-URL list with {@code urls} and merges the result into the playlist. */
+    void setCustomUrls(java.util.Set<String> urls) {
+        List<Clip> found = new ArrayList<>();
+        if (urls != null) {
+            for (String u : urls) {
+                String t = u == null ? "" : u.trim();
+                if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("/")) {
+                    found.add(new Clip(t.substring(Math.max(0, t.lastIndexOf('/') + 1)), t));
+                }
+            }
+        }
+        synchronized (clipsLock) {
+            urlClips.clear();
+            urlClips.addAll(found);
+        }
+        syncCustomClips();
+    }
+
+    /** The previous union of custom clips, so a rescan knows what to drop from the playlist. */
+    private final List<Clip> customs = new ArrayList<>();
+
+    /** Reconciles the playlist with the current custom clips: adds new, removes the gone. */
+    private void syncCustomClips() {
+        List<Clip> now = new ArrayList<>();
+        synchronized (clipsLock) {
+            now.addAll(localClips);
+            now.addAll(urlClips);
+        }
+        List<Clip> added = new ArrayList<>();
+        List<Clip> removed = new ArrayList<>();
+        synchronized (clipsLock) {
+            for (Clip old : customs) if (!now.contains(old) && clips.contains(old)) removed.add(old);
+            for (Clip c : now) if (!clips.contains(c)) added.add(c);
+            for (Clip c : removed) clips.remove(c);
+            clips.addAll(added);
+            customs.clear();
+            customs.addAll(now);
+        }
+        // Live update of a playing playlist: append the new items, drop the gone ones in place —
+        // the current clip keeps playing, the queue just grows/shrinks around it.
+        if (player != null && started) {
+            try {
+                if (!removed.isEmpty()) {
+                    java.util.HashSet<String> gone = new java.util.HashSet<>();
+                    for (Clip c : removed) gone.add(c.url);
+                    for (int i = queue.size() - 1; i >= 0; i--) {
+                        if (gone.contains(queue.get(i).url) && i != player.getCurrentMediaItemIndex()) {
+                            player.removeMediaItem(i);
+                            queue.remove(i);
+                        }
+                    }
+                }
+                if (!added.isEmpty()) {
+                    List<MediaItem> items = new ArrayList<>();
+                    synchronized (clipsLock) {
+                        for (Clip c : added) items.add(MediaItem.fromUri(playable(c.url)));
+                        player.addMediaItems(items);
+                        queue.addAll(added);
+                    }
+                }
+            } catch (Exception e) {
+                android.util.Log.w("Veil", "playlist live-update failed: " + e);
+            }
+        }
+        android.util.Log.i("Veil", "custom clips synced: +" + added.size() + " -" + removed.size()
+                + ", total " + (clips.size()));
+    }
+
+    /** Turns a clip URL into a playable form: bare file paths become file:// URIs. */
+    private static String playable(String url) {
+        if (url.startsWith("/") ) return "file://" + url;
+        // Apple's China CDN edge (sylvan.apple.com → ksyun) serves a TLS chain Android TV
+        // cannot validate ("Trust anchor for certification path not found"; desktop curl fails
+        // the same check). Its plain-HTTP endpoint serves the same files without TLS, so the
+        // aerials always ride HTTP. User-added custom URLs are left untouched.
+        if (url.startsWith("https://sylvan.apple.com/")) return toHttp(url);
+        return url;
+    }
+
     // ---- surface ownership ----
 
     void setDesktopHolder(SurfaceHolder h, Listener l) {
@@ -682,6 +842,7 @@ final class VideoEngine {
         queue.clear();
         queue.addAll(snapshot);
         httpsTried.clear();
+        errorStreak = 0;
         current = snapshot.get(0);
         lastPick = 0;
         pendingViaHttp = true;
@@ -691,7 +852,7 @@ final class VideoEngine {
         try {
             if (player == null) buildPlayer();
             List<MediaItem> items = new ArrayList<>();
-            for (Clip c : queue) items.add(MediaItem.fromUri(toHttp(c.url)));
+            for (Clip c : queue) items.add(MediaItem.fromUri(playable(c.url)));
             player.setMediaItems(items, /* startPositionIndex= */ 0, /* startPositionMs= */ 0L);
             player.setRepeatMode(Player.REPEAT_MODE_ALL);
             player.setPlayWhenReady(true);
@@ -722,8 +883,8 @@ final class VideoEngine {
     private void buildPlayer() {
         DefaultHttpDataSource.Factory http = new DefaultHttpDataSource.Factory()
                 .setAllowCrossProtocolRedirects(true)
-                .setConnectTimeoutMs(8_000)
-                .setReadTimeoutMs(8_000);
+                .setConnectTimeoutMs(5_000)
+                .setReadTimeoutMs(5_000);
         player = new ExoPlayer.Builder(ctx, new DefaultMediaSourceFactory(
                 new DefaultDataSource.Factory(ctx, http))).build();
         player.setVideoSurfaceHolder(dreamActive ? dreamHolder : desktopHolder);
@@ -755,6 +916,7 @@ final class VideoEngine {
         if (!started) return;
         android.util.Log.w("Veil", "video fallback: " + why);
         timeoutHops = 0;
+        errorStreak = 0;
         main.removeCallbacks(prepareTimeout);
         main.removeCallbacks(positionTick);
         releasePlayer();
