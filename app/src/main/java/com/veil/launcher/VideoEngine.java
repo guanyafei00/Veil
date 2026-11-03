@@ -850,8 +850,12 @@ final class VideoEngine {
             player.setVideoSurfaceHolder(null);   // the desktop surface is about to be torn down
         } catch (Exception ignore) {
         }
-        // started and playing stay true on purpose: the UI keeps the video view shown, and
-        // useDesktop() re-prepares without a still-wallpaper flash in between.
+        // Reset the UI state too: the still wallpaper fades back in, so the owner sees the
+        // wallpaper — never a black hole — while the return re-buffers. It also flips the video
+        // view GONE, which forces a fresh surface + surfaceCreated on the way back; fragile TV
+        // ROMs (TCL mt5879) silently reap a backgrounded SurfaceView's surface, and attaching
+        // the player to that dead holder painted black forever while "playing" stayed true.
+        setPlaying(false);
     }
 
     /** Release the decoder without forgetting the started flag (process tear-down). */
