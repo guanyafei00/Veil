@@ -1,9 +1,9 @@
 {
-  "versionCode": 219,
-  "versionName": "2.1.8",
-  "notes": "航拍视频壁纸流式播放修复：优先走 HTTP 直连避免 TLS 卡顿，prepare 超时从 12 秒放宽到 30 秒，超时自动跳到下一条视频；换 ExoPlayer 播放内核，修复部分机型（如 TCL）上视频解码后不渲染的问题；目录刷新时自动探测失效链接并从轮播中剔除。新增应用内检查更新与自更新功能。",
+  "versionCode": 230,
+  "versionName": "2.2.0",
+  "notes": "航拍视频无缝播放列表：换片不再黑屏（修复约 10 秒黑屏）；桌面静态壁纸与视频淡入淡出切换；屏保进出加黑色幕布过渡；GlassSurface 统一设置面板与长按菜单的液态玻璃材质；液态玻璃始终开启；设置面板外不再压暗桌面；聚焦框与图标圆角一致；图标圆角裁切兜底修复。",
   "mandatory": false,
-  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.1.8/Veil-TV-full-v2.1.8.apk",
-  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.1.8/Veil-TV-full-v2.1.8.apk",
-  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.1.8/Veil-TV-lite-v2.1.8.apk"
+  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.0/Veil-TV-full-v2.2.0.apk",
+  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.0/Veil-TV-full-v2.2.0.apk",
+  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.0/Veil-TV-lite-v2.2.0.apk"
 }
