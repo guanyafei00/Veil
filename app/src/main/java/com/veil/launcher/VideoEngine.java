@@ -748,12 +748,19 @@ final class VideoEngine {
         dreamActive = false;
         stage = Stage.DESKTOP;
         applyStage();
-        // Back from a background hold (another app was in front): the player is still warm and
-        // merely paused — resume it. The current frame lands on the re-attached surface within
-        // milliseconds, so the desktop never falls back to the still wallpaper.
-        if (player != null && started) {
+        // Back from a background hold (another app was in front, or the screensaver ended):
+        // the player is parked in IDLE with the playlist and position kept — re-prepare the
+        // same clip at the same spot. A ~1-2 s re-buffer beats both the old full teardown
+        // (rebuild + cross-fade from the still) and the warm-pause variant (DECODING_FAILED
+        // on old codecs when the surface came back). Playing normally (READY) → don't touch.
+        if (player != null && started
+                && player.getPlaybackState() == Player.STATE_IDLE) {
             try {
                 player.setPlayWhenReady(true);
+                player.prepare();
+                prepareBegan = SystemClock.elapsedRealtime();
+                main.removeCallbacks(prepareTimeout);
+                main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
             } catch (Exception ignore) {
             }
         }
@@ -766,6 +773,19 @@ final class VideoEngine {
         dreamActive = true;
         stage = Stage.DREAM;
         applyStage();
+        // Same background-hold resume as useDesktop(): the desktop parked the player in IDLE
+        // when it went behind this screensaver — re-prepare the same clip at the same spot.
+        if (player != null && started
+                && player.getPlaybackState() == Player.STATE_IDLE) {
+            try {
+                player.setPlayWhenReady(true);
+                player.prepare();
+                prepareBegan = SystemClock.elapsedRealtime();
+                main.removeCallbacks(prepareTimeout);
+                main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
+            } catch (Exception ignore) {
+            }
+        }
         if (started && playing) notifyActive();
         else if (started && !playing && player == null) playRandom();
     }
@@ -815,22 +835,23 @@ final class VideoEngine {
     }
 
     /**
-     * Desktop hidden behind an opaque app: pause playback but KEEP the player warm. The old
-     * flow called {@link #pause()} here, which tore the whole player down — every return to the
-     * desktop then spent seconds re-preparing and cross-fading from the still wallpaper. With a
-     * hold, coming home re-attaches the surface and resumes inside the same clip: instant.
-     * The decoder's memory is reclaimed by {@link #pause()} when the video wallpaper is actually
-     * switched off, and by {@link #release()} on process teardown.
+     * Desktop hidden behind an opaque app or taken over by the screensaver: tear the decoder
+     * down but keep the playlist and the position. The first cut of this held the player warm
+     * with pause() and only detached the surface — on return the fresh surface fed old codecs
+     * garbage and T1 (Android 7 MediaCodec) answered ERROR_CODE_DECODING_FAILED on the first
+     * frame, which on a shaky network cascaded into minutes of the still wallpaper. stop()
+     * rebuilds the decoder cleanly; useDesktop() re-prepares the same clip at the same spot.
+     * The old full pause() is reserved for actually switching the video wallpaper off.
      */
     void backgroundHold() {
         if (player == null) return;
         try {
-            player.setPlayWhenReady(false);   // stop decode + network, keep playlist & position
+            player.stop();   // decoder released, playbackState → IDLE, playlist & position kept
             player.setVideoSurfaceHolder(null);   // the desktop surface is about to be torn down
         } catch (Exception ignore) {
         }
         // started and playing stay true on purpose: the UI keeps the video view shown, and
-        // useDesktop() resumes playback and re-notifies without a state flip.
+        // useDesktop() re-prepares without a still-wallpaper flash in between.
     }
 
     /** Release the decoder without forgetting the started flag (process tear-down). */
