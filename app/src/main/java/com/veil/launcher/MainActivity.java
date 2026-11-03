@@ -179,6 +179,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // The desktop has no caption overlay.
         }
     };
+    /**
+     * Every 5 s while the desktop is up: if the engine reports "playing" but the video view's
+     * surface is dead (TCL's ROM silently reaps backgrounded SurfaceViews), rebuild the view —
+     * GONE→VISIBLE makes the ROM create a fresh surface, whose surfaceCreated re-attaches it to
+     * the still-playing player. Self-healing: the desktop recovers on its own instead of sitting
+     * black until the next app round-trip.
+     */
+    private final Runnable surfaceWatchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (bgVideoView != null && videoShowing
+                    && VideoEngine.INSTANCE.isStarted()) {
+                android.view.Surface s = bgVideoView.getHolder().getSurface();
+                if (s == null || !s.isValid()) {
+                    android.util.Log.w("Veil", "watchdog: playing but surface dead — rebuilding");
+                    VideoEngine.INSTANCE.recoverDeadSurface();
+                    bgVideoView.setVisibility(View.GONE);
+                    bgVideoView.postDelayed(() -> {
+                        if (videoShowing && bgVideoView != null) {
+                            bgVideoView.setVisibility(View.VISIBLE);   // fresh surface -> surfaceCreated -> re-attach
+                        }
+                    }, 120L);
+                }
+            }
+            handler.postDelayed(this, 5_000L);
+        }
+    };
     private boolean wallTransitioning;
     /** The Ken Burns breath running on wallpaperView; paused while the desktop is away. */
     private android.animation.ValueAnimator breatheAnim;
@@ -1614,6 +1641,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (breatheAnim != null) breatheAnim.resume();   // the desktop is back: the breath returns
         updateInputsButton();
         handler.postDelayed(minuteTick, MINUTE_MS);
+        handler.removeCallbacks(surfaceWatchdog);
+        handler.postDelayed(surfaceWatchdog, 5_000L);   // the black-screen self-heal is on duty
         // Back on the desktop (from an app or the panel): the idle count starts over.
         lastInteractionAt = System.currentTimeMillis();
         handler.postDelayed(screensaverTick, 15_000L);
@@ -1735,6 +1764,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         unregisterReceiver(netCheckReceiver);
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(screensaverTick);   // an app or the panel is in front: no idle count
+        handler.removeCallbacks(surfaceWatchdog);   // the desktop is hidden: nothing to watch
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (openPopup != null) openPopup.dismiss();

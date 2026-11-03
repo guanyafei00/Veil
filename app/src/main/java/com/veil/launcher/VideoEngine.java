@@ -868,6 +868,19 @@ final class VideoEngine {
         return started;
     }
 
+    /**
+     * Watchdog recovery for a dead surface under a playing engine: TCL's ROM silently reaps a
+     * backgrounded SurfaceView's surface while the player keeps decoding into it (engine says
+     * playing, screen stays black). The caller flips the view GONE→VISIBLE so the ROM builds a
+     * fresh surface; this clears our half so the new surface is re-attached the moment its
+     * surfaceCreated fires. Playback itself is untouched — the next frame lands immediately.
+     */
+    void recoverDeadSurface() {
+        desktopHolder = null;
+        if (!dreamActive) applyStage();
+        android.util.Log.w("Veil", "watchdog: dropped dead desktop surface, awaiting rebuild");
+    }
+
     /** Left/right hop between clips; only the screensaver may drive this. */
     void hop(int step) {
         if (!dreamActive) return;
