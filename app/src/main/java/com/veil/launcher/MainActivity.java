@@ -145,6 +145,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean videoShowing;
     /** True until the first resume: only the cold start gets the animated tile rebuild. */
     private boolean firstResume = true;
+    /**
+     * The bundled aerial frame shown when playback fails and NO still wallpaper is set
+     * (pure-video mode): without it a playback failure painted the desktop pitch black.
+     */
+    private boolean fallbackStillShown;
+
+    /** Shows the bundled aerial frame (assets/aerial_fallback.jpg) as the wallpaper floor. */
+    private void showFallbackStill() {
+        try {
+            File f = new File(getCacheDir(), "aerial_fallback.jpg");
+            if (!f.isFile() || f.length() == 0) {
+                try (java.io.InputStream in = getAssets().open("aerial_fallback.jpg");
+                     java.io.OutputStream out = new java.io.FileOutputStream(f)) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+            }
+            fallbackStillShown = true;
+            showWallpaper(f);   // builds wallpaperView; the next setPlaying(true) fades it out
+            android.util.Log.i("Veil", "showing bundled aerial fallback still");
+        } catch (Exception e) {
+            android.util.Log.w("Veil", "fallback still unavailable: " + e);
+        }
+    }
     /** Drives the shared VideoEngine for the desktop surface; cross-fades the still with the video. */
     private final VideoEngine.Listener desktopVideoListener = new VideoEngine.Listener() {
         @Override
@@ -167,6 +192,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                         .setInterpolator(new android.view.animation.DecelerateInterpolator())
                         .start();
             } else {
+                if (wallpaperView == null) {
+                    showFallbackStill();   // pure-video mode: playback failed — never a black hole
+                    return;
+                }
                 wallpaperView.setVisibility(View.VISIBLE);
                 wallpaperView.animate().alpha(1f).setDuration(600)
                         .setInterpolator(new android.view.animation.DecelerateInterpolator())
@@ -1137,6 +1166,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void refreshWallpaper() {
         File wall = Config.load(this).wallpaper;
         if (wall == null) {
+            if (fallbackStillShown) return;   // pure-video mode: keep the bundled aerial floor visible
             if (wallpaperView != null) {
                 root.removeView(wallpaperView);
                 wallpaperView = null;

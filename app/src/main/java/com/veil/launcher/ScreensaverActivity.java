@@ -72,8 +72,13 @@ public class ScreensaverActivity extends Activity implements SurfaceHolder.Callb
         @Override
         public void onPlayingChanged(boolean playing) {
             if (stopped || !videoMode) return;
-            // First video frame is up (or playback dropped): ease the black curtain accordingly.
-            reveal(playing);
+            // Video back up: ease the curtain away. Video down (playback failure): show the
+            // bundled aerial still behind the clock instead of a black void.
+            if (playing) {
+                reveal(true);
+            } else {
+                showDesktopStill();
+            }
             clockBox.setVisibility(clockOn ? View.VISIBLE : View.GONE);
         }
 
@@ -138,9 +143,26 @@ public class ScreensaverActivity extends Activity implements SurfaceHolder.Callb
         clockTick.run();
     }
 
-    /** Load the desktop's current static wallpaper (the very file the home screen shows) and breathe it. */
+    /** Load the desktop's current static wallpaper (the very file the home screen shows) and breathe it.
+     *  No wallpaper file (pure-video mode) falls back to the bundled aerial frame — never a void. */
     private void showDesktopStill() {
         File wall = Config.load(this).wallpaper;
+        if (!(wall != null && wall.isFile() && wall.length() > 0)) {
+            // Pure-video desktop: unpack the bundled aerial frame and use it as the still.
+            try {
+                wall = new File(getCacheDir(), "aerial_fallback.jpg");
+                if (!(wall.isFile() && wall.length() > 0)) {
+                    try (java.io.InputStream in = getAssets().open("aerial_fallback.jpg");
+                         java.io.OutputStream out = new java.io.FileOutputStream(wall)) {
+                        byte[] buf = new byte[8192];
+                        int n;
+                        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                    }
+                }
+            } catch (Exception e) {
+                android.util.Log.w("Veil", "saver fallback still unavailable: " + e);
+            }
+        }
         if (wall != null && wall.isFile() && wall.length() > 0) {
             Bitmap bmp = decodeWallpaper(wall);
             if (bmp != null) {

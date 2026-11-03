@@ -171,6 +171,12 @@ final class VideoEngine {
                 pendingSeekMs = 0L;
                 WallpaperState.publish(current.url, 0L);
                 notifyClip(current.name);
+                // (Re)arm the prepare timeout for THIS clip: a hop lands here without any other
+                // path arming it, and a stalled clip then hung the engine forever — the "video
+                // never comes back" black desktop. READY clears the callback; normal seamless
+                // transitions just carry a fresh 30 s guard, which is harmless.
+                main.removeCallbacks(prepareTimeout);
+                main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
                 android.util.Log.i("Veil", "seamless transition to: " + current.name);
             }
         }
@@ -196,7 +202,12 @@ final class VideoEngine {
             // re-prepare. NOTE: setMediaItem here would WIPE the whole playlist down to one
             // item, and the next failure would then read count==1 and tear the engine down
             // over a single network blip.
-            if (!httpsTried.contains(bad.url) && bad.url.startsWith("http")) {
+            // Only remote clips that might survive a transport swap get the one-shot retry; an
+            // HTTP status error (403/404 — the China CDN edge simply doesn't carry some files,
+            // observed live) drops immediately: a protocol swap cannot fix a missing file.
+            boolean badHttpStatus = e.errorCode
+                    == androidx.media3.common.PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS;
+            if (!httpsTried.contains(bad.url) && bad.url.startsWith("http") && !badHttpStatus) {
                 httpsTried.add(bad.url);
                 String alt = bad.url.startsWith("https://")
                         ? toHttp(bad.url)
