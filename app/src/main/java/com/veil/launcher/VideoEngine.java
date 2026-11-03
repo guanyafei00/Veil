@@ -748,6 +748,15 @@ final class VideoEngine {
         dreamActive = false;
         stage = Stage.DESKTOP;
         applyStage();
+        // Back from a background hold (another app was in front): the player is still warm and
+        // merely paused — resume it. The current frame lands on the re-attached surface within
+        // milliseconds, so the desktop never falls back to the still wallpaper.
+        if (player != null && started) {
+            try {
+                player.setPlayWhenReady(true);
+            } catch (Exception ignore) {
+            }
+        }
         if (started && playing) notifyActive();
         else if (started && !playing && player == null) playRandom();
     }
@@ -803,6 +812,25 @@ final class VideoEngine {
         releasePlayer();
         setPlaying(false);
         WallpaperState.clear();
+    }
+
+    /**
+     * Desktop hidden behind an opaque app: pause playback but KEEP the player warm. The old
+     * flow called {@link #pause()} here, which tore the whole player down — every return to the
+     * desktop then spent seconds re-preparing and cross-fading from the still wallpaper. With a
+     * hold, coming home re-attaches the surface and resumes inside the same clip: instant.
+     * The decoder's memory is reclaimed by {@link #pause()} when the video wallpaper is actually
+     * switched off, and by {@link #release()} on process teardown.
+     */
+    void backgroundHold() {
+        if (player == null) return;
+        try {
+            player.setPlayWhenReady(false);   // stop decode + network, keep playlist & position
+            player.setVideoSurfaceHolder(null);   // the desktop surface is about to be torn down
+        } catch (Exception ignore) {
+        }
+        // started and playing stay true on purpose: the UI keeps the video view shown, and
+        // useDesktop() resumes playback and re-notifies without a state flip.
     }
 
     /** Release the decoder without forgetting the started flag (process tear-down). */

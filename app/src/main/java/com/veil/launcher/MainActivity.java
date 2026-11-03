@@ -143,6 +143,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private SurfaceView bgVideoView;
     /** Live mirror of the engine's playing state, so still-image fades know to land back at alpha 0. */
     private boolean videoShowing;
+    /** True until the first resume: only the cold start gets the animated tile rebuild. */
+    private boolean firstResume = true;
     /** Drives the shared VideoEngine for the desktop surface; cross-fades the still with the video. */
     private final VideoEngine.Listener desktopVideoListener = new VideoEngine.Listener() {
         @Override
@@ -1593,7 +1595,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         PreviewCapture.stopAndSave();
         updateWeather();
         maybeUpdateBingWallpaper();
-        reloadApps(true);
+        // Animated rebuild only on the first resume (cold start). On the way back from an app
+        // the tiles are rescanned SILENTLY (no layout animation): packages may have changed
+        // while another app was in front (its install events fired outside our receiver), but
+        // the old animated reload here also re-ran the icon animation and reset focus after the
+        // scan, so every keypress made while it ran was rolled back ("desktop resets itself").
+        if (firstResume) {
+            firstResume = false;
+            reloadApps(true);
+        } else {
+            reloadApps(false);
+        }
         updateGreeting();
         updateWifiLabel();
         if (breatheAnim != null) breatheAnim.resume();   // the desktop is back: the breath returns
@@ -1740,7 +1752,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Pausing here would kill the clip mid-buffer and leave the saver showing only the clock on
         // a black background — the "screensaver is all black, only the time shows" bug.
         if (!ScreensaverActivity.showing) {
-            VideoEngine.INSTANCE.pause();
+            // Hold, don't tear down: pausing used to RELEASE the player, so every trip back from
+            // an app re-prepared the stream and flashed the still wallpaper for seconds. A hold
+            // keeps the decoder warm; the video resumes mid-clip the moment the desktop returns.
+            VideoEngine.INSTANCE.backgroundHold();
         }
     }
 
