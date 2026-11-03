@@ -72,9 +72,12 @@ public class ScreensaverActivity extends Activity implements SurfaceHolder.Callb
         @Override
         public void onPlayingChanged(boolean playing) {
             if (stopped || !videoMode) return;
-            // Video back up: ease the curtain away. Video down (playback failure): show the
-            // bundled aerial still behind the clock instead of a black void.
+            // Video back up: drop the cover still and ease the curtain away. Video down
+            // (playback failure or a re-buffer window): show the bundled aerial still behind
+            // the clock instead of the surface's black hole.
             if (playing) {
+                stillView.clearAnimation();
+                stillView.setVisibility(View.GONE);
                 reveal(true);
             } else {
                 showDesktopStill();

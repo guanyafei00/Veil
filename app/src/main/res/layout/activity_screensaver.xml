@@ -5,21 +5,24 @@
     android:layout_height="match_parent"
     android:background="#FF000000">
 
-    <!-- The static still the desktop uses when its wallpaper source is NOT the aerial video.
-         Shown as-is (with a gentle breathe) so the screensaver matches the desktop. -->
-    <ImageView
-        android:id="@+id/saverStill"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:visibility="gone" />
-
     <!-- The shared aerial video (the very same stream the desktop wallpaper plays), used only
          when the desktop wallpaper source is the aerial video. -->
     <SurfaceView
         android:id="@+id/saverVideo"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- The static still the desktop uses when its wallpaper source is NOT the aerial video.
+         Shown as-is (with a gentle breathe) so the screensaver matches the desktop.
+         MUST sit ABOVE the SurfaceView: the surface paints an opaque black hole over every
+         view below it, so a still placed underneath stayed invisible — the screensaver went
+         black for the whole re-buffer window even though the still was "shown". -->
+    <ImageView
+        android:id="@+id/saverStill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
         android:visibility="gone" />
 
     <!-- Black curtain over the still/video: starts opaque and fades away once the content is

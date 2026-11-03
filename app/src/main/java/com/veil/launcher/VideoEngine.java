@@ -137,18 +137,25 @@ final class VideoEngine {
     private boolean pendingViaHttp;
     private long pendingSeekMs;
     private long prepareBegan;
-    /** When the current BUFFERING state began (elapsedRealtime); 0 while not buffering. */
-    private long bufferingSince;
+    /** Cumulative BUFFERING time within the current clip. A dying connection oscillates
+     *  BUFFERING<->READY in short bursts (trickle data), so a single-stretch timer never
+     *  fills — accumulating survives that and still covers the black window. */
+    private long bufferTroubleMs;
+    private long lastStateAt;
+    private int lastState = Player.STATE_IDLE;
     /** Built once and reused across every clip so a rotation never re-creates the decoder. */
     private final Player.Listener engineListener = new Player.Listener() {
         @Override
         public void onPlaybackStateChanged(int state) {
             if (player == null) return;   // released mid-flight; stale callback
+            long now = SystemClock.elapsedRealtime();
+            if (lastState == Player.STATE_BUFFERING) bufferTroubleMs += now - lastStateAt;
+            lastState = state;
+            lastStateAt = now;
             if (state == Player.STATE_READY) {
                 main.removeCallbacks(prepareTimeout);
                 timeoutHops = 0;
                 errorStreak = 0;
-                bufferingSince = 0L;
                 android.util.Log.i("Veil", "video prepared in "
                         + (SystemClock.elapsedRealtime() - prepareBegan) / 1000
                         + "s: " + (current != null ? current.name : "?"));
@@ -161,15 +168,9 @@ final class VideoEngine {
             } else if (state == Player.STATE_ENDED) {
                 buildQueue();   // repeat mode should prevent this; a reshuffle is a safe recovery
             } else if (state == Player.STATE_BUFFERING) {
-                if (bufferingSince == 0L) {
-                    bufferingSince = SystemClock.elapsedRealtime();
-                    // Pull the next tick forward so the 3 s re-buffer guard fires at ~3-5 s
-                    // instead of waiting out the regular 5 s sampling interval.
-                    main.removeCallbacks(positionTick);
-                    main.post(positionTick);
-                }
-            } else if (state == Player.STATE_IDLE) {
-                bufferingSince = 0L;
+                // Pull the next tick forward so the cumulative re-buffer guard reacts fast.
+                main.removeCallbacks(positionTick);
+                main.post(positionTick);
             }
         }
 
@@ -181,6 +182,7 @@ final class VideoEngine {
             if (idx >= 0 && idx < queue.size()) {
                 current = queue.get(idx);
                 prepareBegan = SystemClock.elapsedRealtime();
+                bufferTroubleMs = 0L;   // fresh clip, fresh buffering budget
                 pendingSeekMs = 0L;
                 WallpaperState.publish(current.url, 0L);
                 notifyClip(current.name);
@@ -997,15 +999,20 @@ final class VideoEngine {
         public void run() {
             if (!started || player == null || !playing) return;
             try {
-                // Mid-playback re-buffer (CDN stall mid-clip): the surface holds a black frame
-                // while playing=true suppresses the still wallpaper. Past a short grace period,
-                // drop the playing state so the wallpaper covers the gap; STATE_READY flips it
-                // back with a cross-fade.
-                if (bufferingSince != 0L
-                        && SystemClock.elapsedRealtime() - bufferingSince > 3_000L) {
-                    android.util.Log.w("Veil", "video buffering >3s mid-clip, showing still: "
-                            + (current != null ? current.name : "?"));
-                    bufferingSince = 0L;
+                // Re-buffer guard (seamless hand-off to an unbuffered clip, mid-clip CDN stall):
+                // the surface shows a black frame while playing=true suppresses the still. Once
+                // the accumulated buffering time in this clip passes a short grace period, drop
+                // the playing state so the wallpaper covers the gap; STATE_READY flips it back
+                // with a cross-fade. The accumulator survives BUFFERING<->READY oscillation on
+                // a trickle connection, which a single-stretch timer never would.
+                int st = player.getPlaybackState();
+                long now = SystemClock.elapsedRealtime();
+                if (st == Player.STATE_READY && now - lastStateAt > 15_000L) {
+                    bufferTroubleMs = 0L;   // clip has been streaming cleanly; start fresh
+                }
+                if (st == Player.STATE_BUFFERING && bufferTroubleMs > 3_000L) {
+                    android.util.Log.w("Veil", "video re-buffer " + bufferTroubleMs
+                            + "ms, showing still: " + (current != null ? current.name : "?"));
                     setPlaying(false);
                     return;   // tick stops naturally once playing is false
                 }
