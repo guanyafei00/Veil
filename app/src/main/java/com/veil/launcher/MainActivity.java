@@ -151,13 +151,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         public void onPlayingChanged(boolean playing) {
             android.util.Log.i("Veil", "desktop onPlayingChanged " + playing + " -> cross-fade");
             videoShowing = playing;
-            if (wallpaperView == null) return;
+            // The video view flip must happen even with NO still wallpaper set (pure-video mode,
+            // wallpaperView == null): backgroundHold drops the surface, and only a GONE->VISIBLE
+            // flip makes the ROM build a fresh one. Gating on wallpaperView here left the view
+            // "visible" around a dead surface — a permanently black desktop on TCL.
+            if (bgVideoView != null) bgVideoView.setVisibility(playing ? View.VISIBLE : View.GONE);
+            if (wallpaperView == null) return;   // no still to fade; the flip above is the whole job
             // The video surface sits BEHIND the window, so fading the still's alpha is a true
             // cross-fade on every API level — no SurfaceView-alpha quirks. When playback stops the
             // still fades back in over black (the video goes away underneath it).
             wallpaperView.animate().cancel();
             if (playing) {
-                if (bgVideoView != null) bgVideoView.setVisibility(View.VISIBLE);
                 wallpaperView.setVisibility(View.VISIBLE);
                 wallpaperView.animate().alpha(0f).setDuration(900)
                         .setInterpolator(new android.view.animation.DecelerateInterpolator())
@@ -167,7 +171,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 wallpaperView.animate().alpha(1f).setDuration(600)
                         .setInterpolator(new android.view.animation.DecelerateInterpolator())
                         .start();
-                if (bgVideoView != null) bgVideoView.setVisibility(View.GONE);
             }
         }
 
