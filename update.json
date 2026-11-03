@@ -1,7 +1,7 @@
 {
   "versionCode": 230,
   "versionName": "2.2.0",
-  "notes": "航拍视频无缝播放列表：换片不再黑屏（修复约 10 秒黑屏）；桌面静态壁纸与视频淡入淡出切换；屏保进出加黑色幕布过渡；GlassSurface 统一设置面板与长按菜单的液态玻璃材质；液态玻璃始终开启；设置面板外不再压暗桌面；聚焦框与图标圆角一致；图标圆角裁切兜底修复。",
+  "notes": "修复视频壁纸/屏保无法播放的问题（Apple 国内 CDN 证书在电视上验证不过，现已 1-2 秒出画面）；航拍视频无缝播放列表，换片不再黑屏；播放抗断网：坏片段自动跳过、断网回退静态图、恢复自动续播；新增自定义视频源：本地视频、视频直链、扫码添加链接；桌面静态壁纸与视频淡入淡出切换；屏保进出加黑色幕布过渡；GlassSurface 统一设置面板与长按菜单的液态玻璃材质，三四级弹窗同步玻璃化；液态玻璃始终开启；设置面板外不再压暗桌面。",
   "mandatory": false,
   "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.0/Veil-TV-full-v2.2.0.apk",
   "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.0/Veil-TV-full-v2.2.0.apk",
