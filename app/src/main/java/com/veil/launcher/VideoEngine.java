@@ -137,6 +137,8 @@ final class VideoEngine {
     private boolean pendingViaHttp;
     private long pendingSeekMs;
     private long prepareBegan;
+    /** When the current BUFFERING state began (elapsedRealtime); 0 while not buffering. */
+    private long bufferingSince;
     /** Built once and reused across every clip so a rotation never re-creates the decoder. */
     private final Player.Listener engineListener = new Player.Listener() {
         @Override
@@ -146,6 +148,7 @@ final class VideoEngine {
                 main.removeCallbacks(prepareTimeout);
                 timeoutHops = 0;
                 errorStreak = 0;
+                bufferingSince = 0L;
                 android.util.Log.i("Veil", "video prepared in "
                         + (SystemClock.elapsedRealtime() - prepareBegan) / 1000
                         + "s: " + (current != null ? current.name : "?"));
@@ -157,6 +160,16 @@ final class VideoEngine {
                 main.post(positionTick);
             } else if (state == Player.STATE_ENDED) {
                 buildQueue();   // repeat mode should prevent this; a reshuffle is a safe recovery
+            } else if (state == Player.STATE_BUFFERING) {
+                if (bufferingSince == 0L) {
+                    bufferingSince = SystemClock.elapsedRealtime();
+                    // Pull the next tick forward so the 3 s re-buffer guard fires at ~3-5 s
+                    // instead of waiting out the regular 5 s sampling interval.
+                    main.removeCallbacks(positionTick);
+                    main.post(positionTick);
+                }
+            } else if (state == Player.STATE_IDLE) {
+                bufferingSince = 0L;
             }
         }
 
@@ -951,6 +964,11 @@ final class VideoEngine {
             buildQueue();
             return;
         }
+        // A hop re-buffers the next clip from scratch (unlike a seamless end-of-clip transition,
+        // which is preloaded): the surface shows a black frame until the new clip renders. Drop
+        // the playing state first so the still wallpaper (or the bundled fallback in pure-video
+        // mode) covers that window; STATE_READY flips it back with a cross-fade.
+        setPlaying(false);
         prepareBegan = SystemClock.elapsedRealtime();
         if (step >= 0) player.seekToNextMediaItem();
         else player.seekToPreviousMediaItem();
@@ -979,6 +997,18 @@ final class VideoEngine {
         public void run() {
             if (!started || player == null || !playing) return;
             try {
+                // Mid-playback re-buffer (CDN stall mid-clip): the surface holds a black frame
+                // while playing=true suppresses the still wallpaper. Past a short grace period,
+                // drop the playing state so the wallpaper covers the gap; STATE_READY flips it
+                // back with a cross-fade.
+                if (bufferingSince != 0L
+                        && SystemClock.elapsedRealtime() - bufferingSince > 3_000L) {
+                    android.util.Log.w("Veil", "video buffering >3s mid-clip, showing still: "
+                            + (current != null ? current.name : "?"));
+                    bufferingSince = 0L;
+                    setPlaying(false);
+                    return;   // tick stops naturally once playing is false
+                }
                 long pos = player.getCurrentPosition();
                 if (current != null) WallpaperState.publish(current.url, pos);
             } catch (Exception ignore) {
