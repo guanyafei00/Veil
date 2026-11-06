@@ -50,6 +50,19 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:localeConfig="@xml/locales_config">
+
+        <!-- TCL (mt5879 / Android 11) runs a "launcherStrategy" gate inside its system
+             PackageInstaller. Any APK declaring MAIN + category.HOME is refused unless the
+             package is white-listed or passes isTclLauncher(). That check compares the new
+             APK's signature with the CURRENT default home (which is Veil itself during an
+             in-app self-update, so it matches) and then requires this exact meta-data value.
+             Without it the install dies ~15ms after InstallInstalling with
+             "系统已禁止安装该软件包" (verifier: pkg.mAppMetaData == null).
+             A plain unused key on every other ROM, so it is safe to ship everywhere. -->
+        <meta-data
+            android:name="com.tcl.app.type"
+            android:value="com.tcl.ui" />
+
         <!-- usesCleartextTraffic: the 360 wallpaper API answers HTTP ONLY (no TLS on cdn.apc.360.cn).
              Android 9+ silently blocks cleartext by default — every Wall360 request died with
              "connection failed" before this flag, on networks where the API was in fact reachable. -->
