@@ -1,9 +1,9 @@
 {
-  "versionCode": 231,
-  "versionName": "2.2.1",
-  "notes": "全面消除黑屏：换片/断网缓冲期自动切静态图兜底，网络恢复自动淡回视频；修复屏保静图被视频层盖住导致的黑屏；断流震荡下也能正确触发兜底；视频死_surface 5 秒自愈看门狗；跳片、坏片段、超时均有超时保护与壁纸过渡。",
+  "versionCode": 232,
+  "versionName": "2.2.2",
+  "notes": "根治 TCL 桌面/屏保黑屏：新增僵尸播放器守卫——引擎自认在播但画面冻结 15 秒即自动重建播放器并切兜底帧（针对 TCL 换屏面静默杀死解码器且不报错的问题，桌面与屏保共用此守卫）；扫码传图与扫码加视频链接接口全面鉴权（局域网安全加固）；上传改为流式落盘防小内存盒子 OOM；补充 LICENSE/NOTICE 开源合规文件。",
   "mandatory": false,
-  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.1/Veil-TV-full-v2.2.1.apk",
-  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.1/Veil-TV-full-v2.2.1.apk",
-  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.1/Veil-TV-lite-v2.2.1.apk"
+  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.2/Veil-TV-full-v2.2.2.apk",
+  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.2/Veil-TV-full-v2.2.2.apk",
+  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.2/Veil-TV-lite-v2.2.2.apk"
 }
