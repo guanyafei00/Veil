@@ -45,6 +45,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    // The Cards JVM tests exercise real code paths that call android.util.Log; without this
+    // every android.* call throws "not mocked" and the whole suite dies before asserting
+    // anything (discovered 11-10: the 42 tests had never actually been run).
+    testOptions {
+        unitTests {
+            returnDefaultValues = true
+        }
+    }
 }
 
 // Clear product names: the sideloaded APKs are handed to the owner as Veil-TV-full.apk / Veil-TV-lite.apk.

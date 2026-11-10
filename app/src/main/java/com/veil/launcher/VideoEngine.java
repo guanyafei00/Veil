@@ -71,6 +71,12 @@ final class VideoEngine {
     private static final int MAX_ERROR_STREAK = 5;
     /** How often we sample the playback position for diagnostics. */
     private static final long POSITION_TICK_MS = 5_000L;
+    /** A READY-but-frozen playhead that outlives this is a silently dead decoder → rebuild.
+     *  The TCL mt5879 kills the decoder on surface hand-offs WITHOUT raising any error; every
+     *  state machine here keeps believing playback is fine while the screen stays black. 15 s
+     *  of zero movement while READY is impossible for real playback (frames advance), so it is
+     *  a safe zombie signature. */
+    private static final long POSITION_FREEZE_MS = 15_000L;
     /** Network timeouts for the live catalog fetch. */
     private static final int FETCH_TIMEOUT_MS = 8_000;
 
@@ -143,6 +149,11 @@ final class VideoEngine {
     private long bufferTroubleMs;
     private long lastStateAt;
     private int lastState = Player.STATE_IDLE;
+    /** Playhead freeze tracking for the zombie guard in positionTick: compares the sampled
+     *  position across ticks; a frozen playhead while READY means a decoder that died without
+     *  an error (TCL surface hand-offs) and needs a full player rebuild via failToStill(). */
+    private long lastZombiePos = Long.MIN_VALUE;
+    private long zombieSince;
     /** Built once and reused across every clip so a rotation never re-creates the decoder. */
     private final Player.Listener engineListener = new Player.Listener() {
         @Override
@@ -1017,6 +1028,29 @@ final class VideoEngine {
                     return;   // tick stops naturally once playing is false
                 }
                 long pos = player.getCurrentPosition();
+                // Zombie guard: only while READY — BUFFERING already has its own cumulative
+                // guard above. Real playback always advances the playhead; a 15 s freeze while
+                // the engine still claims playing is a dead decoder that never raised an error
+                // (the 11-10 TCL "black screensaver with a live clock" incident). failToStill()
+                // covers the screen with the still/fallback frame, releases the player and
+                // rebuilds the queue after the retry delay — the same recovery the error and
+                // timeout paths use, now also armed for silent deaths.
+                if (st == Player.STATE_READY) {
+                    if (pos != lastZombiePos) {
+                        lastZombiePos = pos;
+                        zombieSince = 0L;
+                    } else if (zombieSince == 0L) {
+                        zombieSince = now;
+                    } else if (now - zombieSince > POSITION_FREEZE_MS) {
+                        android.util.Log.w("Veil", "zombie player: position frozen at " + pos
+                                + "ms for " + (now - zombieSince) / 1000 + "s while playing"
+                                + " — rebuilding");
+                        lastZombiePos = Long.MIN_VALUE;
+                        zombieSince = 0L;
+                        failToStill("zombie player (frozen playhead)");
+                        return;
+                    }
+                }
                 if (current != null) WallpaperState.publish(current.url, pos);
             } catch (Exception ignore) {
                 // Position is advisory; a transient error just means the next tick retries.
