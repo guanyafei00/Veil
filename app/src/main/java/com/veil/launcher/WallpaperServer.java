@@ -19,7 +19,8 @@ import java.util.Enumeration;
  * A tiny embedded HTTP server behind the "scan to upload wallpaper" feature. The TV shows a
  * QR code pointing at http://&lt;tv-ip&gt;:8790/?t=&lt;token&gt;; the phone opens the page, picks a
  * photo, the page downscales it on a canvas and POSTs the raw JPEG back to /upload?t=token.
- * The token guards against anyone else on the LAN sneaking an upload while the page is up.
+ * Every endpoint (GET page, POST /upload, POST /video) checks the token with a constant-time
+ * comparison, so nobody else on the LAN can push a wallpaper or a video URL while the page is up.
  * Single client at a time, five-minute lifetime, writes Config.WALLPAPER_NAME and calls back
  * on the main thread — MainActivity re-reads the wallpaper on resume, so no extra plumbing.
  */
@@ -109,6 +110,10 @@ final class WallpaperServer {
         String[] parts = line.split(" ");
         if (parts.length < 2) return;
         String path = parts[1];
+        if (!authorized(path)) {
+            respond(sock, "403 Forbidden", "bad token");
+            return;
+        }
 
         if (parts[0].equals("POST") && path.startsWith("/video")) {
             // The phone pasted a direct video URL: plain-text body, no size drama.
@@ -143,12 +148,6 @@ final class WallpaperServer {
                 respond(sock, "413 Payload Too Large", "too large");
                 return;
             }
-            byte[] body = readBody(in, len);
-            if (body == null || body.length < 4
-                    || (body[0] & 0xFF) != 0xFF || (body[1] & 0xFF) != 0xD8) {
-                respond(sock, "400 Bad Request", "not a jpeg");
-                return;
-            }
             File dir = Config.dir(context);
             if (dir == null) {
                 respond(sock, "500 Server Error", "no storage");
@@ -156,8 +155,12 @@ final class WallpaperServer {
             }
             File target = new File(dir, Config.WALLPAPER_NAME);
             File tmp = new File(dir, Config.WALLPAPER_NAME + ".up");
-            try (FileOutputStream out = new FileOutputStream(tmp)) {
-                out.write(body);
+            // Stream straight to disk: allocating the whole body (up to 25 MB) in one byte[]
+            // is exactly the OOM this project already fixed on the download path.
+            if (!writeBody(in, len, tmp)) {
+                tmp.delete();
+                respond(sock, "400 Bad Request", "not a jpeg");
+                return;
             }
             if (target.isFile() && !target.delete() || !tmp.renameTo(target)) {
                 tmp.delete();
@@ -171,10 +174,6 @@ final class WallpaperServer {
             return;
         }
         if (parts[0].equals("GET") && (path.startsWith("/?t=") || path.equals("/"))) {
-            if (!path.contains("t=" + token)) {
-                respond(sock, "403 Forbidden", "bad token");
-                return;
-            }
             byte[] page = page().getBytes("UTF-8");
             sock.getOutputStream().write(("HTTP/1.1 200 OK\r\n"
                     + "Content-Type: text/html; charset=utf-8\r\n"
@@ -184,6 +183,39 @@ final class WallpaperServer {
         } else {
             respond(sock, "404 Not Found", "nope");
         }
+    }
+
+    /** Every request must carry the exact token; compare in constant time. */
+    private boolean authorized(String path) {
+        int q = path.indexOf('?');
+        if (q < 0 || token == null) return false;
+        for (String kv : path.substring(q + 1).split("&")) {
+            if (kv.startsWith("t=")) {
+                byte[] got = kv.substring(2).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                byte[] want = token.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                return java.security.MessageDigest.isEqual(got, want);
+            }
+        }
+        return false;
+    }
+
+    /** Streams exactly len bytes into tmp, rejecting anything that is not a JPEG. */
+    private static boolean writeBody(InputStream in, int len, File tmp) throws IOException {
+        byte[] buf = new byte[16 * 1024];
+        byte[] magic = new byte[2];
+        int magicLen = 0;
+        int off = 0;
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            while (off < len) {
+                int n = in.read(buf, 0, Math.min(buf.length, len - off));
+                if (n <= 0) return false;
+                for (int i = 0; i < n && magicLen < 2; i++) magic[magicLen++] = buf[i];
+                out.write(buf, 0, n);
+                off += n;
+            }
+        }
+        return len >= 4 && magicLen == 2
+                && (magic[0] & 0xFF) == 0xFF && (magic[1] & 0xFF) == 0xD8;
     }
 
     private static int parseCl(String s) {

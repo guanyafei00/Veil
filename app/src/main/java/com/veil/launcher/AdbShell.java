@@ -33,8 +33,9 @@ import javax.crypto.Cipher;
  *
  * <p>Portions of the ADB protocol framing here are derived from
  * <a href="https://github.com/moz1u/dadb">dadb</a>, licensed under the Apache License, Version 2.0
- * (http://www.apache.org/licenses/LICENSE-2.0). This file, like the rest of the project, is
- * distributed under Apache-2.0; the ADB wire protocol itself is public knowledge from AOSP.
+ * (http://www.apache.org/licenses/LICENSE-2.0); those derived portions remain Apache-2.0, while
+ * the project as a whole is MIT (see LICENSE). The ADB wire protocol itself is public knowledge
+ * from AOSP.
  */
 final class AdbShell {
 

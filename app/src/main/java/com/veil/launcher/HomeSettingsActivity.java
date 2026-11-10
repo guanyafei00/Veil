@@ -959,7 +959,7 @@ public class HomeSettingsActivity extends Activity {
     /** QR-code wallpaper upload: the phone scans, opens the page, and POSTs a JPEG. */
     private void showQrUpload() {
         String token = String.format(java.util.Locale.US, "%08d",
-                new java.util.Random().nextInt(100000000));
+                new java.security.SecureRandom().nextInt(100000000));
         WallpaperServer server = new WallpaperServer(this, token, () ->
                 Toast.makeText(this, R.string.scan_upload_done, Toast.LENGTH_LONG).show());
         String url = server.start();
@@ -1003,7 +1003,7 @@ public class HomeSettingsActivity extends Activity {
     /** QR-code video-URL entry: the phone scans, opens the page, pastes a direct link, POSTs it. */
     private void showQrVideoUrl() {
         String token = String.format(java.util.Locale.US, "%08d",
-                new java.util.Random().nextInt(100000000));
+                new java.security.SecureRandom().nextInt(100000000));
         WallpaperServer server = new WallpaperServer(this, token, null, url -> {
             java.util.Set<String> urls = prefs.loadCustomVideoUrls();
             urls.add(url);
