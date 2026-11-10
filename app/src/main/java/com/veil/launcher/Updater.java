@@ -41,15 +41,21 @@ import java.nio.charset.StandardCharsets;
  * </pre>
  *
  * The manifest URL is configured per-device in Settings (Update server address), falling back to
- * {@link #DEFAULT_MANIFEST_URL} — set that constant before building if you ship a fixed endpoint.
+ * the {@link #DEFAULT_MANIFEST_URLS} list — the first reachable source wins, so a single dead CDN
+ * mirror cannot break update checks.
  * The download lands in {@code getFilesDir()/updates} and is handed to the system installer through
  * a {@code FileProvider} on API 24+ (the {@code file://} path is used on older boxes like the T1).
  */
 final class Updater {
 
-    /** Build-time fallback manifest URL. Leave "" to require per-device configuration in Settings. */
-    static final String DEFAULT_MANIFEST_URL =
-            "https://cdn.jsdelivr.net/gh/guanyafei00/Veil@main/update.json";
+    /** Build-time fallback manifest sources, tried in order. cdn.jsdelivr.net has been seen
+     *  returning 403 for entire regions, so every mirror must have an independent fallback. */
+    static final String[] DEFAULT_MANIFEST_URLS = {
+            "https://cdn.jsdelivr.net/gh/guanyafei00/Veil@main/update.json",
+            "https://fastly.jsdelivr.net/gh/guanyafei00/Veil@main/update.json",
+            "https://gcore.jsdelivr.net/gh/guanyafei00/Veil@main/update.json",
+            "https://raw.githubusercontent.com/guanyafei00/Veil/main/update.json",
+    };
 
     /** Last-resort version code if PackageManager is unavailable (almost never used). */
     private static final int FALLBACK_VERSION_CODE = 220;
@@ -82,11 +88,16 @@ final class Updater {
         return m.optString("apkUrl", "");
     }
 
-    /** The manifest URL to use: per-device setting, else the build-time default. */
-    static String manifestUrl(Context ctx) {
+    /** Manifest URL candidates: per-device setting if set, else the build-time source list. */
+    static String[] manifestUrls(Context ctx) {
         String url = new PrefsStore(ctx).loadUpdateUrl();
-        if (url == null || url.trim().isEmpty()) url = DEFAULT_MANIFEST_URL;
-        return url.trim();
+        if (url != null && !url.trim().isEmpty()) return new String[]{url.trim()};
+        return DEFAULT_MANIFEST_URLS;
+    }
+
+    /** The primary manifest URL to use: per-device setting, else the first build-time default. */
+    static String manifestUrl(Context ctx) {
+        return manifestUrls(ctx)[0];
     }
 
     static int installedVersionCode(Context ctx) {
@@ -120,15 +131,20 @@ final class Updater {
 
     /** Check now. {@code manual=true} reports every outcome; {@code manual=false} only a new version. */
     static void check(final Context ctx, final boolean manual) {
-        final String url = manifestUrl(ctx);
-        if (url.isEmpty()) {
+        final String[] urls = manifestUrls(ctx);
+        if (urls.length == 0 || urls[0].isEmpty()) {
             if (manual) toast(ctx, R.string.update_no_url);
             return;
         }
         if (manual) toast(ctx, R.string.update_checking);
         final int installed = installedVersionCode(ctx);
         new Thread(() -> {
-            JSONObject m = fetchManifest(url);
+            JSONObject m = null;
+            for (String url : urls) {
+                m = fetchManifest(url);
+                if (m != null) break;
+                Log.w(TAG, "manifest source failed, trying next: " + url);
+            }
             if (m == null) {
                 if (manual) {
                     MAIN.post(() -> toast(ctx,
@@ -136,8 +152,9 @@ final class Updater {
                 }
                 return;
             }
-            if (isNewer(m, installed)) {
-                MAIN.post(() -> showUpdateDialog(ctx, m, installed));
+            final JSONObject manifest = m;
+            if (isNewer(manifest, installed)) {
+                MAIN.post(() -> showUpdateDialog(ctx, manifest, installed));
             } else if (manual) {
                 MAIN.post(() -> toast(ctx, ctx.getString(R.string.update_latest, installedVersionName(ctx))));
             }
