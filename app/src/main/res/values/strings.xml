@@ -250,10 +250,13 @@
     <string name="value_none">–</string>
     <string name="btn_save">Save</string>
     <string name="sec_bing">BING WALLPAPERS</string>
-    <string name="sec_w360">360 GALLERY</string>
     <string name="sec_diag">DIAGNOSTICS</string>
     <string name="sec_appearance">APPEARANCE</string>
     <string name="sec_others">OTHERS</string>
+    <string name="sec_general">GENERAL</string>
+    <string name="sec_w360">360 GALLERY</string>
+    <string name="sec_data">DATA</string>
+    <string name="sec_tools">TOOLS</string>
 
     <!-- The wallpaper gallery: one source's picture pool, seen and picked from. -->
     <string name="gallery_open">Picture gallery</string>
@@ -308,6 +311,8 @@
     <string name="section_update">Update</string>
     <string name="check_update">Check for update</string>
     <string name="update_auto">Auto-check on launch</string>
+    <string name="update_auto_on">Auto-check on launch enabled</string>
+    <string name="update_auto_off">Auto-check on launch disabled</string>
     <string name="update_url">Update server address</string>
     <string name="update_checking">Checking for update…</string>
     <string name="update_latest">Up to date (v%1$s)</string>

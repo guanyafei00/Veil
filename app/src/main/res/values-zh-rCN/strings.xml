@@ -218,10 +218,13 @@
     <string name="value_none">–</string>
     <string name="btn_save">保存</string>
     <string name="sec_bing">必应壁纸</string>
-    <string name="sec_w360">360 图库</string>
     <string name="sec_diag">网络诊断</string>
     <string name="sec_appearance">外观</string>
     <string name="sec_others">其它</string>
+    <string name="sec_general">通用</string>
+    <string name="sec_w360">360 图库</string>
+    <string name="sec_data">数据</string>
+    <string name="sec_tools">工具</string>
 
     <!-- 壁纸画廊：单个图源的图片库，可看可挑。 -->
     <string name="gallery_open">图库预览</string>
@@ -305,4 +308,26 @@
     <string name="input_key_service_description">按遥控器的信源键时打开信源切换。</string>
     <string name="vpn">VPN</string>
     <string name="vpn_off">VPN 关闭</string>
+    <!-- Update rows (added 2026-11-10: the whole update group was missing here, so the panel read English on Chinese boxes) -->
+    <string name="section_update">更新</string>
+    <string name="check_update">检查更新</string>
+    <string name="update_auto">启动时自动检查</string>
+    <string name="update_auto_on">已开启启动时自动检查更新</string>
+    <string name="update_auto_off">已关闭启动时自动检查更新</string>
+    <string name="update_url">更新服务器地址</string>
+    <string name="update_checking">正在检查更新…</string>
+    <string name="update_latest">已是最新版本（v%1$s）</string>
+    <string name="update_available">发现新版本</string>
+    <string name="update_available_msg">发现新版本 v%1$s（当前 v%2$s）
+
+%3$s</string>
+    <string name="update_now">立即更新</string>
+    <string name="update_later">稍后再说</string>
+    <string name="update_downloading">正在下载更新（%1$d%%）</string>
+    <string name="update_download_failed">下载失败：%1$s</string>
+    <string name="update_no_url">未配置更新服务器。请在 设置 → Veil → 更新服务器地址 中填写。</string>
+    <string name="update_check_failed">检查更新失败：%1$s</string>
+    <string name="update_url_hint">https://…/update.json</string>
+    <string name="update_url_saved">更新地址已保存</string>
+    <string name="update_url_invalid">地址必须以 http:// 或 https:// 开头</string>
 </resources>

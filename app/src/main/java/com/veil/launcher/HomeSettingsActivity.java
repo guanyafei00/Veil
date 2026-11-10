@@ -51,6 +51,10 @@ public class HomeSettingsActivity extends Activity {
     /** -1 = the category list is showing; otherwise the open category's index. */
     private int activeCategory = -1;
 
+    /** Set when the panel goes to the background; on re-entry the panel lands on the category
+     *  list again instead of staying parked in a level-two/three menu (the owner's ask). */
+    private boolean leftSinceResume;
+
     private static final int PAGE_BG = 0xF60D0D10;
     // Translucent charcoal glass: restore the earlier long-press menu material, but keep it
     // lighter so the rows sit over any wallpaper without reading as black slabs.
@@ -158,10 +162,24 @@ public class HomeSettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshValues();
+        // Re-entry after the panel was left (HOME, a system page, the gallery): land on the
+        // category list — never stay parked inside a level-two/three menu (the owner's ask).
+        if (leftSinceResume && activeCategory >= 0) {
+            leftSinceResume = false;
+            showCategories();
+            return;
+        }
+        leftSinceResume = false;
         // First show (or a focus lost to a rebuild): land on the category list, not nowhere.
         if (getCurrentFocus() == null && categories.getChildCount() > 0) {
             categories.getChildAt(0).requestFocus();
         }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        leftSinceResume = true;
     }
 
     @Override
@@ -417,6 +435,10 @@ public class HomeSettingsActivity extends Activity {
             Toast.makeText(this, on ? R.string.preview_on : R.string.preview_off,
                     Toast.LENGTH_SHORT).show();
         });
+        // The status-bar colours live here, not under Clock: they dress the desktop, they have
+        // nothing to do with time (the owner's report — the Clock category read as a mixed bag).
+        row(getString(R.string.panel_top_bar), topBarColorValue = new TextView(this), v -> pickColor(R.string.panel_top_bar, prefs.loadTopBarColor(), c -> prefs.saveTopBarColor(c)));
+        row(getString(R.string.panel_top_text), topTextColorValue = new TextView(this), v -> pickColor(R.string.panel_top_text, prefs.loadTopTextColor(), c -> prefs.saveTopTextColor(c)));
         sectionHeader(getString(R.string.sec_others));
         row(getString(R.string.manage_hidden), null, v -> showHidden());
     }
@@ -427,6 +449,7 @@ public class HomeSettingsActivity extends Activity {
      * to be interleaved, which read as noise on the TV (the owner's report).
      */
     private void buildWallpaperRows() {
+        section(getString(R.string.sec_general));
         row(getString(R.string.panel_wallpaper), null, v -> showWallpaperDialog());
         row(getString(R.string.scan_upload), null, v -> showQrUpload());
 
@@ -527,6 +550,8 @@ public class HomeSettingsActivity extends Activity {
     }
 
     private void buildClockRows() {
+        // The status-bar colour rows used to sit here; they moved to the Desktop category
+        // (appearance) — this category is now weather and time only.
         row(getString(R.string.panel_weather), weatherValue = new TextView(this), v -> showWeatherDialog());
         row(getString(R.string.weather_unit), unitValue = new TextView(this), v -> {
             prefs.setWeatherFahrenheit(!prefs.isWeatherFahrenheit());
@@ -538,8 +563,6 @@ public class HomeSettingsActivity extends Activity {
             refreshValues();
             Toast.makeText(this, on ? R.string.done_24h_on : R.string.done_24h_off, Toast.LENGTH_SHORT).show();
         });
-        row(getString(R.string.panel_top_bar), topBarColorValue = new TextView(this), v -> pickColor(R.string.panel_top_bar, prefs.loadTopBarColor(), c -> prefs.saveTopBarColor(c)));
-        row(getString(R.string.panel_top_text), topTextColorValue = new TextView(this), v -> pickColor(R.string.panel_top_text, prefs.loadTopTextColor(), c -> prefs.saveTopTextColor(c)));
     }
 
     private void buildSystemRows() {
@@ -559,11 +582,12 @@ public class HomeSettingsActivity extends Activity {
         row(getString(R.string.guard_button), guardValue = new TextView(this), v -> toggleGuard());
         row(getString(R.string.guard_service), guardServiceValue = new TextView(this),
                 v -> openAccessibilitySettings());
+        row(getString(R.string.system_home), systemHomeValue = new TextView(this), v -> systemHome());
+        sectionHeader(getString(R.string.sec_data));
         row(getString(R.string.backup), null, v -> backup());
         row(getString(R.string.restore), null, v -> restore());
+        sectionHeader(getString(R.string.sec_tools));
         row(getString(R.string.panel_control), null, v -> showControlCenter());
-        // The row's value shows whether this desktop IS the default home right now.
-        row(getString(R.string.system_home), systemHomeValue = new TextView(this), v -> systemHome());
         row(getString(R.string.panel_about), null, v -> showStorageInfo());
         // In-app update: check now, toggle auto-check on launch, and configure the manifest URL.
         sectionHeader(getString(R.string.section_update));
@@ -1704,7 +1728,7 @@ public class HomeSettingsActivity extends Activity {
         boolean on = !prefs.isUpdateAuto();
         prefs.setUpdateAuto(on);
         refreshValues();
-        Toast.makeText(this, on ? "Auto-check on launch enabled" : "Auto-check on launch disabled",
+        Toast.makeText(this, on ? R.string.update_auto_on : R.string.update_auto_off,
                 Toast.LENGTH_SHORT).show();
     }
 
