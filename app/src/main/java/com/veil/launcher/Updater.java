@@ -148,7 +148,7 @@ final class Updater {
             if (m == null) {
                 if (manual) {
                     MAIN.post(() -> toast(ctx,
-                            ctx.getString(R.string.update_check_failed, "network unreachable or unreadable manifest")));
+                            ctx.getString(R.string.update_check_failed, ctx.getString(R.string.update_err_generic))));
                 }
                 return;
             }

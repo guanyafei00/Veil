@@ -324,6 +324,7 @@
     <string name="update_download_failed">Download failed: %1$s</string>
     <string name="update_no_url">No update server configured. Set it under Settings → Veil → Update server address.</string>
     <string name="update_check_failed">Update check failed: %1$s</string>
+    <string name="update_err_generic">network unreachable or unreadable manifest</string>
     <string name="update_url_hint">https://…/update.json</string>
     <string name="update_url_saved">Update address saved</string>
     <string name="update_url_invalid">Address must start with http:// or https://</string>

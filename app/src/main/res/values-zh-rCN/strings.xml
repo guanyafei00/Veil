@@ -327,6 +327,7 @@
     <string name="update_download_failed">下载失败：%1$s</string>
     <string name="update_no_url">未配置更新服务器。请在 设置 → Veil → 更新服务器地址 中填写。</string>
     <string name="update_check_failed">检查更新失败：%1$s</string>
+    <string name="update_err_generic">网络不可达或清单无法读取</string>
     <string name="update_url_hint">https://…/update.json</string>
     <string name="update_url_saved">更新地址已保存</string>
     <string name="update_url_invalid">地址必须以 http:// 或 https:// 开头</string>
