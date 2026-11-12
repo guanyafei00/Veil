@@ -193,14 +193,14 @@
                 android:layout_marginBottom="6dp"
                 android:orientation="horizontal">
 
-                <TextView
+                <com.veil.launcher.PillTextView
                     android:id="@+id/btnInputs"
                     style="@style/TopButton"
                     android:text="@string/inputs"
                     android:drawableStart="@drawable/ic_input"
                     android:nextFocusDown="@+id/grid" />
 
-                <TextView
+                <com.veil.launcher.PillTextView
                     android:id="@+id/btnWifi"
                     style="@style/TopButton"
                     android:maxWidth="180dp"
@@ -210,7 +210,7 @@
                     android:drawableStart="@drawable/ic_wifi"
                     android:nextFocusDown="@+id/grid" />
 
-                <TextView
+                <com.veil.launcher.PillTextView
                     android:id="@+id/btnSettings"
                     style="@style/TopButton"
                     android:text="@string/settings"

@@ -1,33 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Frosted pill, tvOS / Apple-glass style: light translucent material + top sheen + bright rim. -->
+<!-- Frosted pill, tvOS / Apple-glass style.
+
+     ONE shape per state, on purpose. This drawable used to be a layer-list: a rounded base plus
+     a rounded "sheen" item with a bottom inset. Some TV ROMs (TCL mt5879) ignore the corners of
+     an inset layer-list item, so the sheen painted a square dark plate with straight corners
+     behind the rounded rim — the rectangular block in the owner's photos. A single shape cannot
+     disagree with itself, and PillTextView additionally clips the whole view to a capsule.
+
+     The idle material is smoked charcoal instead of translucent white: a light pill under white
+     text loses contrast on bright wallpaper, and turns muddy on dark ones. A near-opaque dark
+     fill keeps white text legible on every aerial frame while the light rim keeps the glass look. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="#F5FFFFFF" />
-            <corners android:radius="22dp" />
+            <solid android:color="#FFF8F8FA" />
+            <!-- A faint dark rim keeps the white focused pill separated from snow / cloud frames;
+                 a white rim disappeared into bright aerial wallpaper. -->
+            <stroke android:width="1dp" android:color="#4D000000" />
+            <corners android:radius="21dp" />
         </shape>
     </item>
     <item>
-        <layer-list>
-            <item>
-                <shape android:shape="rectangle">
-                    <gradient android:angle="270"
-                        android:startColor="#33FFFFFF"
-                        android:endColor="#15FFFFFF" />
-                    <stroke android:width="1dp" android:color="#45FFFFFF" />
-                    <corners android:radius="22dp" />
-                </shape>
-            </item>
-            <item android:bottom="20dp">
-                <shape android:shape="rectangle">
-                    <gradient android:angle="270"
-                        android:startColor="#22FFFFFF"
-                        android:endColor="#00FFFFFF" />
-                    <!-- The sheen MUST carry the pill's corners: without them the square
-                         layer peeked past the rounded arc at the top (the owner's photos). -->
-                    <corners android:radius="22dp" />
-                </shape>
-            </item>
-        </layer-list>
+        <shape android:shape="rectangle">
+            <gradient android:angle="270"
+                android:startColor="#DD22252B"
+                android:endColor="#C8121419" />
+            <stroke android:width="1dp" android:color="#66FFFFFF" />
+            <corners android:radius="21dp" />
+        </shape>
     </item>
 </selector>

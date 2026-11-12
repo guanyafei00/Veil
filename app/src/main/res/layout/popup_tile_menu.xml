@@ -18,7 +18,7 @@
         android:paddingEnd="12dp"
         android:paddingTop="8dp"
         android:paddingBottom="6dp"
-        android:textColor="#8CFFFFFF"
+        android:textColor="#D9FFFFFF"
         android:textSize="11sp"
         android:fontFamily="sans-serif"
         android:fontVariationSettings="'wght' 500"

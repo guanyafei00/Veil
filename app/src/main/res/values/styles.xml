@@ -53,7 +53,9 @@
          gallery reads as part of the launcher and not as a web page. -->
     <style name="GalleryButton">
         <item name="android:layout_width">wrap_content</item>
-        <item name="android:layout_height">46dp</item>
+        <!-- Same 42dp as the top-bar pills so the 21dp background radius is exactly half the
+             height: a true capsule with no straight segment on the sides. -->
+        <item name="android:layout_height">42dp</item>
         <item name="android:paddingStart">26dp</item>
         <item name="android:paddingEnd">26dp</item>
         <item name="android:gravity">center</item>

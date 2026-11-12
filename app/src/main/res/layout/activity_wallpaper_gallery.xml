@@ -97,24 +97,24 @@
         android:paddingTop="18dp"
         android:paddingBottom="26dp">
 
-        <TextView
+        <com.veil.launcher.PillTextView
             android:id="@+id/galleryPrev"
             style="@style/GalleryButton"
             android:text="@string/gallery_previous" />
 
-        <TextView
+        <com.veil.launcher.PillTextView
             android:id="@+id/galleryNext"
             style="@style/GalleryButton"
             android:layout_marginStart="14dp"
             android:text="@string/gallery_next" />
 
-        <TextView
+        <com.veil.launcher.PillTextView
             android:id="@+id/galleryApply"
             style="@style/GalleryButton"
             android:layout_marginStart="14dp"
             android:text="@string/gallery_apply" />
 
-        <TextView
+        <com.veil.launcher.PillTextView
             android:id="@+id/galleryClose"
             style="@style/GalleryButton"
             android:layout_marginStart="14dp"

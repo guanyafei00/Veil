@@ -61,8 +61,9 @@ public class HomeSettingsActivity extends Activity {
     private static final int ROW_BG = 0x4023262E;
     private static final int CARD_BG = 0xFFF5F5F7;
     private static final int LABEL_COLOR = 0xFFF2F2F4;
-    private static final int VALUE_COLOR = 0xFF98989F;
-    private static final int HEADER_COLOR = 0xFF7C7C85;
+    // Secondary text sits on a dark smoked sheet: keep it bright enough to read at TV distance.
+    private static final int VALUE_COLOR = 0xFFC9C9D0;
+    private static final int HEADER_COLOR = 0xFFA8A8B0;
 
     private static final int[] CATEGORIES = {
             R.string.section_desk, R.string.section_wallpaper, R.string.section_screensaver,
@@ -310,7 +311,7 @@ public class HomeSettingsActivity extends Activity {
         TextView chevron = new TextView(this);
         chevron.setText("›");
         chevron.setTextSize(22);
-        chevron.setTextColor(0xFF57575E);
+        chevron.setTextColor(0xFF8E8E96);
         chevron.setPadding((int) (10 * d), 0, 0, 0);
         r.addView(chevron, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -523,7 +524,7 @@ public class HomeSettingsActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(label);
         t.setTextSize(13);
-        t.setTextColor(0xFF8E8E93);
+        t.setTextColor(0xFFB4B4BC);
         t.setPadding((int) (22 * d), (int) (14 * d), 0, (int) (4 * d));
         t.setFocusable(false);
         t.setFocusableInTouchMode(false);
@@ -661,7 +662,7 @@ public class HomeSettingsActivity extends Activity {
         TextView chevron = new TextView(this);
         chevron.setText("›");
         chevron.setTextSize(20);
-        chevron.setTextColor(0xFF57575E);
+        chevron.setTextColor(0xFF8E8E96);
         chevron.setPadding((int) (10 * d), 0, 0, 0);
         r.addView(chevron, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));

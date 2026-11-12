@@ -1,8 +1,11 @@
 package com.veil.launcher;
 
 import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.graphics.drawable.Drawable;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.TextView;
 
 /**
  * Every dialog in the launcher flows through here, so this is the one place that decides what a
@@ -27,7 +30,7 @@ final class Dialogs {
     static void style(android.app.Dialog d) {
         try {
             WindowManager.LayoutParams lp = d.getWindow().getAttributes();
-            lp.dimAmount = 0.45f;
+            lp.dimAmount = 0.55f;
             lp.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
             d.getWindow().setAttributes(lp);
             float density = d.getContext().getResources().getDisplayMetrics().density;
@@ -36,6 +39,38 @@ final class Dialogs {
             int pad = (int) (2 * density);
             d.getWindow().getDecorView().setPadding(pad, pad, pad, pad);
             d.getWindow().setBackgroundDrawable(glass);
+            // Some box ROMs re-style the framework dialog theme to a light/grey text colour,
+            // so a long Chinese release note can land on the glass as barely-readable grey.
+            // Force the message/title colours after the decor view is laid out.
+            d.getWindow().getDecorView().post(() -> {
+                try {
+                    TextView message = (TextView) d.findViewById(android.R.id.message);
+                    if (message != null) {
+                        message.setTextColor(0xFFF2F2F4);
+                        message.setLineSpacing(0, 1.18f);
+                    }
+                    int titleId = d.getContext().getResources()
+                            .getIdentifier("alertTitle", "id", "android");
+                    if (titleId != 0) {
+                        TextView title = (TextView) d.findViewById(titleId);
+                        if (title != null) title.setTextColor(0xFFFFFFFF);
+                    }
+                    // Box ROMs also grey out the button-bar labels: "Cancel" / "Update now"
+                    // were almost invisible on the near-black glass. Force them back to white.
+                    if (d instanceof AlertDialog) {
+                        AlertDialog ad = (AlertDialog) d;
+                        int[] which = {DialogInterface.BUTTON_NEGATIVE,
+                                DialogInterface.BUTTON_NEUTRAL,
+                                DialogInterface.BUTTON_POSITIVE};
+                        for (int w : which) {
+                            Button b = ad.getButton(w);
+                            if (b != null) b.setTextColor(0xFFF2F2F4);
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // A dialog dismissed before the post runs simply keeps the theme colour.
+                }
+            });
         } catch (Exception e) {
             // A dialog with no window (already dismissed) simply keeps the theme default.
             android.util.Log.d("Veil", "dialog window styling skipped: " + e);

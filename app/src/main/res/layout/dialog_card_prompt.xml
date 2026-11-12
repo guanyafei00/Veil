@@ -50,7 +50,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="@string/card_prompt_hint"
-        android:textColor="#99FFFFFF"
+        android:textColor="#CCFFFFFF"
         android:textSize="13sp"
         android:fontFamily="sans-serif" />
 
@@ -60,7 +60,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:maxLines="2"
-        android:textColor="#80FFFFFF"
+        android:textColor="#B3FFFFFF"
         android:textSize="12sp"
         android:letterSpacing="0.03"
         android:fontFamily="sans-serif" />
@@ -72,7 +72,7 @@
         android:orientation="horizontal"
         android:gravity="end">
 
-        <TextView
+        <com.veil.launcher.PillTextView
             android:id="@+id/btnKeep"
             style="@style/TopButton"
             android:text="@string/card_keep_hidden"
@@ -81,7 +81,7 @@
             android:nextFocusLeft="@+id/btnKeep"
             android:nextFocusRight="@+id/btnShow" />
 
-        <TextView
+        <com.veil.launcher.PillTextView
             android:id="@+id/btnShow"
             style="@style/TopButton"
             android:text="@string/card_show"
