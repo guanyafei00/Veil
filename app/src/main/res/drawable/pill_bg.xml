@@ -1,32 +1,68 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Frosted pill, tvOS / Apple-glass style.
+<!-- Liquid-glass pill, tvOS / Apple style.
 
-     ONE shape per state, on purpose. This drawable used to be a layer-list: a rounded base plus
-     a rounded "sheen" item with a bottom inset. Some TV ROMs (TCL mt5879) ignore the corners of
-     an inset layer-list item, so the sheen painted a square dark plate with straight corners
-     behind the rounded rim — the rectangular block in the owner's photos. A single shape cannot
-     disagree with itself, and PillTextView additionally clips the whole view to a capsule.
+     The material is genuinely translucent: you see the aerial wallpaper through it, tinted by a
+     thin smoked layer, with a specular highlight on the top half and a darker refractive rim on
+     the bottom edge. Text legibility is carried by the white label's own soft shadow (see
+     PillTextView), NOT by painting the pill black — an opaque charcoal pill reads as a sticker
+     on a bright sky frame and kills the whole glass effect, especially on the icon-free desktop.
 
-     The idle material is smoked charcoal instead of translucent white: a light pill under white
-     text loses contrast on bright wallpaper, and turns muddy on dark ones. A near-opaque dark
-     fill keeps white text legible on every aerial frame while the light rim keeps the glass look. -->
+     Layer-list items with an inset used to lose their corners on some TV ROMs (TCL mt5879) and
+     paint a square plate behind the pill. Two independent safeguards now: every layer declares
+     its own 21dp corners, and PillTextView clips the whole view to a capsule outline. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
-        <shape android:shape="rectangle">
-            <solid android:color="#FFF8F8FA" />
-            <!-- A faint dark rim keeps the white focused pill separated from snow / cloud frames;
-                 a white rim disappeared into bright aerial wallpaper. -->
-            <stroke android:width="1dp" android:color="#4D000000" />
-            <corners android:radius="21dp" />
-        </shape>
+        <layer-list>
+            <item>
+                <shape android:shape="rectangle">
+                    <!-- Slightly translucent white: still unmistakably the focus, still glass. -->
+                    <solid android:color="#F2FFFFFF" />
+                    <!-- Faint dark rim separates the white pill from snow / bright cloud frames. -->
+                    <stroke android:width="1dp" android:color="#4D000000" />
+                    <corners android:radius="21dp" />
+                </shape>
+            </item>
+            <item android:bottom="21dp">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270"
+                        android:startColor="#26FFFFFF"
+                        android:endColor="#00FFFFFF" />
+                    <corners android:radius="21dp" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
     <item>
-        <shape android:shape="rectangle">
-            <gradient android:angle="270"
-                android:startColor="#DD22252B"
-                android:endColor="#C8121419" />
-            <stroke android:width="1dp" android:color="#66FFFFFF" />
-            <corners android:radius="21dp" />
-        </shape>
+        <layer-list>
+            <!-- Smoked glass body: 35% -> 24% alpha, neutral charcoal. Bright frames show through
+                 as tinted colour rather than being blocked, dark frames keep white text punchy. -->
+            <item>
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270"
+                        android:startColor="#59272B33"
+                        android:endColor="#3D171A21" />
+                    <stroke android:width="1dp" android:color="#8CFFFFFF" />
+                    <corners android:radius="21dp" />
+                </shape>
+            </item>
+            <!-- Top specular sheen: the light-catching upper half of the glass. -->
+            <item android:bottom="21dp">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270"
+                        android:startColor="#38FFFFFF"
+                        android:endColor="#00FFFFFF" />
+                    <corners android:radius="21dp" />
+                </shape>
+            </item>
+            <!-- Bottom refractive rim: gives the glass a visible thickness. -->
+            <item android:top="36dp">
+                <shape android:shape="rectangle">
+                    <gradient android:angle="270"
+                        android:startColor="#00000000"
+                        android:endColor="#33000000" />
+                    <corners android:radius="21dp" />
+                </shape>
+            </item>
+        </layer-list>
     </item>
 </selector>

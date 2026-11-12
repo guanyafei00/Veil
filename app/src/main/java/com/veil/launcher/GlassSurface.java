@@ -17,12 +17,12 @@ final class GlassSurface {
     /** How a panel reads against its surroundings. */
     enum Style {
         /** The half-screen settings sheet: left-only corners, window blur on API 31+.
-         *  The fill is nearly opaque: a 30%-alpha sheet let bright aerial frames shine through
-         *  white labels, which is what made long Chinese rows hard to read. The uncovered half
-         *  of the desktop still keeps its own brightness — only the sheet itself is solid. */
-        SETTINGS(0xED202228, 0xE214161B, 0x66FFFFFF, 28f, 22f, 110),
-        /** Dialogs and the long-press action sheet: the deepest material, all corners. */
-        MENU(0xF21E2026, 0xE8121419, 0x66FFFFFF, 22f, 22f, 0);
+         *  Translucent glass, not a painted slab — the wallpaper's colour must still read through
+         *  the sheet. 82% -> 72% keeps long Chinese rows legible while leaving the material
+         *  visibly glassy; the 110px backdrop blur does the rest on API 31+. */
+        SETTINGS(0xD1202228, 0xB814161B, 0x66FFFFFF, 28f, 22f, 110),
+        /** Dialogs and the long-press action sheet: one step deeper, all corners. */
+        MENU(0xE01E2026, 0xC8121419, 0x66FFFFFF, 22f, 22f, 0);
 
         final int topColor, bottomColor, strokeColor;
         final float cornerDp, blurRadius;
@@ -61,8 +61,8 @@ final class GlassSurface {
         // Top specular sheen, inset from the bottom so it fades out before the lower edge.
         GradientDrawable sheen = new GradientDrawable();
         sheen.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
-        // Subtle on an opaque panel: a bright sheen would compete with the text on top.
-        sheen.setColors(new int[]{0x0CFFFFFF, 0x00FFFFFF});
+        // Specular highlight: modest enough not to wash out text, bright enough to read as glass.
+        sheen.setColors(new int[]{0x1AFFFFFF, 0x00FFFFFF});
         // Round only the top corners of the sheen, or it would poke out of the panel's rounded top.
         float[] sheenRadii = leftOnly
                 ? new float[]{r, r, 0, 0, 0, 0, 0, 0}

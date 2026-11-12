@@ -20,6 +20,9 @@ import android.widget.TextView;
  */
 public final class PillTextView extends TextView {
 
+    /** The white label's own contrast, so the glass behind it can stay genuinely translucent. */
+    private float shadowRadius;
+
     public PillTextView(Context context) {
         super(context);
         init();
@@ -36,6 +39,7 @@ public final class PillTextView extends TextView {
     }
 
     private void init() {
+        shadowRadius = 2.4f * getResources().getDisplayMetrics().density;
         setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
@@ -46,5 +50,26 @@ public final class PillTextView extends TextView {
             }
         });
         setClipToOutline(true);
+        applyTextShadow();
+    }
+
+    @Override
+    protected void drawableStateChanged() {
+        super.drawableStateChanged();
+        applyTextShadow();
+    }
+
+    /**
+     * A soft dark halo under the white label is what keeps it readable on snow / bright sky
+     * frames. Doing it on the text (instead of darkening the whole pill) preserves the liquid
+     * glass: the wallpaper still shows through the material. Focused pills flip to dark text on
+     * white and must not carry a dark halo.
+     */
+    private void applyTextShadow() {
+        if (isFocused()) {
+            setShadowLayer(0f, 0f, 0f, 0);
+        } else {
+            setShadowLayer(shadowRadius, 0f, shadowRadius * 0.35f, 0xC0000000);
+        }
     }
 }
