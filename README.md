@@ -4,44 +4,51 @@ tvOS 风格的 Android TV / 盒子桌面（launcher）。纯 Java、原生 View�
 
 **基于 [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv)（MIT）二次开发** —— 在其基础上做了大量修复、功能增强与界面重制。许可见 [LICENSE](LICENSE)，第三方声明见 [NOTICE.md](NOTICE.md)。
 
-当前版本：**v2.2.1 / versionCode 231**。
+当前版本：**v2.2.4 / versionCode 234**。
 
 ## 下载与安装
 
 | 安装包 | 体积 | 说明 |
 | --- | --- | --- |
-| [Veil-TV-full-v2.2.1.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.1/Veil-TV-full-v2.2.1.apk) | 约 1.89 MiB | 离线兜底壁纸较高分辨率（约 850 KB） |
-| [Veil-TV-lite-v2.2.1.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.1/Veil-TV-lite-v2.2.1.apk) | 约 1.30 MiB | 离线兜底壁纸较低分辨率（约 246 KB） |
+| [Veil-TV-full-v2.2.4.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-full-v2.2.4.apk) | 约 1.89 MiB | 离线兜底壁纸较高分辨率（约 850 KB） |
+| [Veil-TV-lite-v2.2.4.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-lite-v2.2.4.apk) | 约 1.30 MiB | 离线兜底壁纸较低分辨率（约 246 KB） |
 
 两包功能完全一致，**唯一差异是 `default_wallpaper.jpg` 的体积**；包名同为 `com.veil.launcher`，可互相覆盖安装。所有壁纸与视频源均在线拉取，安装包内不预置壁纸图库。
 
 ```bash
-adb install -r Veil-TV-lite-v2.2.1.apk
+adb install -r Veil-TV-lite-v2.2.4.apk
 ```
 
-安装后在系统设置里把 Veil 设为默认桌面。设置面板里有「检查更新」（读取仓库根目录 `update.json`）。
+> **签名**：所有发布包使用同一套签名，可相互覆盖安装。更换签名密钥会导致存量设备无法覆盖安装，请勿随意替换。
 
-> **TCL 电视注意**：应用内自更新在部分 TCL ROM 上会被系统安装器的校验链拦截；已在 Veil 桌面且是默认桌面的设备通常可通过，首次安装仍需 adb / U 盘 / 文件管理器手动一步。详见设置里的提示。
+### 首次上手三步
 
-> **签名**：release 包使用 debug keystore 签名（侧载用途）。更换签名密钥会导致存量设备无法覆盖安装，请勿随意替换。
+1. 安装 APK 后，在系统设置里把 Veil 设为默认桌面。部分 ROM 会弹「主屏幕应用」选择器，选「始终」。
+2. 按需在系统「无障碍 / 辅助功能」里开启 Veil 的桌面守护；不开也能正常使用，只是无法阻止其他桌面抢占。
+3. 需要本机控制（设备信息 / 重启 / 关机）时，再按设置内提示完成 adb 授权。
 
-## 当前版本做了什么
+设置面板里的「检查更新」会读取仓库根目录 `update.json`。
 
-### v2.2.1 — 黑屏全链路修复
+> **TCL 电视注意**：应用内自更新在部分 TCL ROM 上会被系统安装器的校验链拦截；已在 Veil 桌面且是默认桌面的设备通常可通过，首次安装仍需 adb / U 盘 / 文件管理器手动一步。
 
-- 换片、断流、缓冲期自动切静态图兜底，网络恢复后自动淡回视频；BUFFERING↔READY 震荡下用累计缓冲时间判定，不再被反复清零。
-- 修复屏保静图被视频 SurfaceView 盖住导致的黑屏 —— 静图兜底移到 SurfaceView 之上。
-- 5 秒 surface 看门狗：检测到"引擎自认在播但 surface 已死"时强制重建，下一帧上屏。
-- Apple 中国 CDN（金山云节点）TLS 在电视上验不过 → 该域名强制 HTTP；错误重试用 `replaceMediaItem` 保住整条播放列表。
-- 跳片 / 坏片段 / prepare 超时均有保护；`assets/aerial_fallback.jpg` 作为最后的兜底帧，纯视频模式也不会黑桌面。
-- 返回桌面用 `player.stop()` + `setPlaying(false)` 挂起，避免 TCL ROM 回收后台 surface 后留下黑洞。
+## 近期更新
 
-### v2.2.0 — 无缝播放、自定义视频源、玻璃化
+### v2.2.4 — 胶囊圆角与液态玻璃可读性
 
-- **ExoPlayer 播放列表**：全部片段洗牌后 `setMediaItems` + `REPEAT_MODE_ALL`，换片是解码级衔接，不再有约 10 秒黑帧。屏保左右键跳片走 `seekToNext/PreviousMediaItem`。
-- **静态 ↔ 动态壁纸 / 屏保淡入淡出**，进屏保与回退都有过渡。
-- **自定义视频源**：扫描 `/sdcard/Veil/videos` 下的本地视频、添加 http(s) 直链，播放中热更新队列不中断当前片段；支持手机扫码提交视频链接。
-- **共享玻璃组件 `GlassSurface`**：设置面板与长按菜单统一材质；所有 AlertDialog 经 `Dialogs.style()` 一并玻璃化；设置浮层不再压暗桌面。
+- 右上角两个胶囊改为框架级裁切的真圆角（`ViewOutlineProvider` + `clipToOutline`），跨 ROM 不再出现方角。
+- 保持半透明液态玻璃材质：烟灰主体 + 顶部高光 + 亮描边 + 底部暗折射边；可读性改由白字柔和深阴影承担，无图标（纯壁纸）桌面上不再出现深色块。
+- 设置面板、对话框与选项列表文字统一提亮，聚焦态对比度同步修正。
+- 「检查更新」失败的通用提示改为简体中文。
+
+### v2.2.3 — 自更新修复 + 设置面板整理
+
+- 更新清单从单源改为四源回退（cdn / fastly / gcore / raw），任一镜像可达即可检查新版本。
+- 设置面板补齐 17 个简体中文词条、条目重新分组；退出二三级菜单后再进入自动回到一级列表。
+
+### v2.2.2 / v2.2.1 — 黑屏根治
+
+- 播放位置冻结守卫（桌面与屏保共用）+ 断流 / 缓冲期静态图兜底 + surface 看门狗，全面消除黑屏。
+- 局域网接口鉴权与上传流式落盘加固；新增 MIT LICENSE 与 NOTICE.md。
 
 > 早期 v2.1.x 曾采用「下载再播 + LRU 600 MB / 4 条」的本地缓存方案，已在 v2.2.0 被在线播放列表取代，不再有本地视频缓存池。
 
@@ -70,7 +77,16 @@ adb install -r Veil-TV-lite-v2.2.1.apk
 
 **忘记锁屏 / 文件夹密码**
 
-当前没有电视端自助重置入口，且备份 JSON 内含明文密码（妥善保管）。有 adb 时可执行 `adb shell pm clear com.veil.launcher` 重置，代价是桌面布局、壁纸、文件夹全部清空并需重新设为默认桌面。
+当前没有电视端自助重置入口，备份文件包含桌面配置与凭据，请妥善保管。有 adb 时可执行 `adb shell pm clear com.veil.launcher` 重置，代价是桌面布局、壁纸、文件夹全部清空并需重新设为默认桌面。
+
+## 已实测机型
+
+| 设备 | 系统 | 状态 |
+| --- | --- | --- |
+| 斐讯 T1（q201） | Android 7.1.2 | 主要验证机，全功能实拍验证 |
+| TCL 85T7K（mt5879） | Android 11 | 已实测；首次安装需手动一步，部分 ROM 应用内自更新受系统校验链拦截 |
+
+其它机型尚未验证，欢迎在 Issues 反馈实机表现。
 
 ## 构建
 
@@ -86,10 +102,10 @@ adb install -r Veil-TV-lite-v2.2.1.apk
 
 ## 已知限制
 
-- 仅实测过斐讯 T1（Android 7.1.2）与 TCL 85T7K / mt5879（Android 11），"老盒子兼容"仍待更多机型验证。
 - 114 条 Apple 航拍直链借用 Apple CDN，可能失效、区域受限或被封禁；届时功能降级为静态壁纸。素材版权归 Apple Inc.。
-- 锁屏密码以明文存于本地 `SharedPreferences`，备份 JSON 亦含明文；请勿把备份文件放到共享目录。
-- 无 CI、无 androidTest；42 个 JVM 单测只覆盖 Cards 卡片校验。发版前依赖真机验证。
+- 桌面锁凭据仅保存在本机；备份文件请妥善保管，勿放共享目录。
+- 自动化测试覆盖有限（42 个 JVM 单测），发版前依赖真机验证。
+- 老盒子兼容性依赖社区反馈，目前实测机型见上表。
 
 ## 许可证
 

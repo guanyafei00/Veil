@@ -10,8 +10,8 @@ android {
         applicationId 'com.veil.launcher'
         minSdk 23
         targetSdk 34
-        versionCode 233
-        versionName '2.2.3'
+        versionCode 234
+        versionName '2.2.4'
     }
 
     // Two packages, one codebase. As of v2.1.2 the wallpapers are ONLINE-ONLY by owner's call:

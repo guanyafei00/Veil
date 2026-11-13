@@ -1,9 +1,9 @@
 {
-  "versionCode": 233,
-  "versionName": "2.2.3",
-  "notes": "修复电视端「检查更新」失效：cdn.jsdelivr.net 区域性 403 导致唯一的更新清单源不可达，现按 cdn → fastly → gcore → raw 多源回退，任一镜像可用即可感知新版本；设置面板补齐简体中文翻译（更新组 17 个词条此前显示英文）；设置条目重新分组（顶栏颜色归入桌面外观，系统分类拆为 Veil/数据/工具/更新四组）；退出设置再进入自动回到一级分类列表，不再停留在二三级菜单。",
+  "versionCode": 234,
+  "versionName": "2.2.4",
+  "notes": "右上角两个胶囊改为框架级裁切的真圆角，跨 ROM 不再出现方角；液态玻璃保持半透明材质，可读性改由白字柔和阴影承担，无图标（纯壁纸）桌面不再出现深色块；设置面板、对话框与选项列表文字统一提亮，聚焦态对比度同步修正；「检查更新」失败的通用提示改为简体中文。",
   "mandatory": false,
-  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.3/Veil-TV-full-v2.2.3.apk",
-  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.3/Veil-TV-full-v2.2.3.apk",
-  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.3/Veil-TV-lite-v2.2.3.apk"
+  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-full-v2.2.4.apk",
+  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-full-v2.2.4.apk",
+  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-lite-v2.2.4.apk"
 }
