@@ -218,10 +218,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final Runnable surfaceWatchdog = new Runnable() {
         @Override
         public void run() {
-            // Watch the surface even while the still is up: a dead surface plus a stalled
-            // playing flag is exactly the black-desktop / frozen-still pair. Previously the
-            // watchdog only ran while videoShowing was true, so the stuck-still case was blind.
-            if (bgVideoView != null && VideoEngine.INSTANCE.isStarted()
+            // Only watch while video is SUPPOSED to be on the surface. In still mode the
+            // SurfaceView is deliberately detached, so getSurface()==null is normal there —
+            // treating it as "dead" caused a rebuild every tick on N1/T1. The stuck-still
+            // case is covered by VideoEngine's heartbeat (STILL_STUCK_MS), not here.
+            if (bgVideoView != null && videoShowing && VideoEngine.INSTANCE.isStarted()
                     && !ScreensaverActivity.showing) {
                 android.view.Surface s = bgVideoView.getHolder().getSurface();
                 if (s == null || !s.isValid()) {
