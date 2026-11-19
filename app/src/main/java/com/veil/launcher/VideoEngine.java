@@ -77,6 +77,17 @@ final class VideoEngine {
      *  of zero movement while READY is impossible for real playback (frames advance), so it is
      *  a safe zombie signature. */
     private static final long POSITION_FREEZE_MS = 15_000L;
+    /** A desktop<->screensaver hand-off must put a fresh frame on the new surface within this. */
+    private static final long HANDOFF_GRACE_MS = 6_000L;
+    /** The still left up this long while a player exists means the recovery chain stalled.
+     *  Longer than two 12 s clip hops so a normal dead-clip ladder is not interrupted. */
+    private static final long STILL_STUCK_MS = 20_000L;
+    /** One clip's prepare budget while playing. Cold start / full rebuild keeps 30 s. */
+    private static final long CLIP_PREPARE_TIMEOUT_MS = 12_000L;
+    /** No player at all: longer grace, because failToStill() already retries after 30 s. */
+    private static final long NO_PLAYER_STUCK_MS = 45_000L;
+    /** Minimum gap between two automatic rebuilds, so a flaky network cannot thrash the decoder. */
+    private static final long RECOVERY_COOLDOWN_MS = 25_000L;
     /** Network timeouts for the live catalog fetch. */
     private static final int FETCH_TIMEOUT_MS = 8_000;
 
@@ -154,8 +165,30 @@ final class VideoEngine {
      *  an error (TCL surface hand-offs) and needs a full player rebuild via failToStill(). */
     private long lastZombiePos = Long.MIN_VALUE;
     private long zombieSince;
+    /** Hand-off watchdog: a surface switch is only done once a frame is actually rendered. */
+    private boolean awaitingHandoffFrame;
+    private boolean pendingSurfaceRebind;
+    private long stillSince;
+    private long lastRecoveryAt;
+    /** Desktop hidden behind an opaque app: the heartbeat must not rebuild while away. */
+    private boolean held;
     /** Built once and reused across every clip so a rotation never re-creates the decoder. */
     private final Player.Listener engineListener = new Player.Listener() {
+        @Override
+        public void onRenderedFirstFrame() {
+            if (player == null) return;
+            // The only reliable proof that the NEW surface is receiving frames. TV ROMs can
+            // accept setVideoSurfaceHolder() while the decoder still paints into a reaped
+            // surface: state stays READY, the playhead advances, the screen stays black — so
+            // neither the playhead-freeze guard nor the re-buffer guard can see it.
+            if (!awaitingHandoffFrame) return;
+            awaitingHandoffFrame = false;
+            main.removeCallbacks(handoffGuard);
+            android.util.Log.i("Veil", "handoff: first frame rendered on the new surface");
+            setPlaying(true);
+            armTick();
+        }
+
         @Override
         public void onPlaybackStateChanged(int state) {
             if (player == null) return;   // released mid-flight; stale callback
@@ -175,7 +208,7 @@ final class VideoEngine {
                     WallpaperState.publish(current.url, pendingSeekMs);
                     notifyClip(current.name);
                 }
-                main.post(positionTick);
+                armTick();
             } else if (state == Player.STATE_ENDED) {
                 buildQueue();   // repeat mode should prevent this; a reshuffle is a safe recovery
             } else if (state == Player.STATE_BUFFERING) {
@@ -202,7 +235,7 @@ final class VideoEngine {
                 // never comes back" black desktop. READY clears the callback; normal seamless
                 // transitions just carry a fresh 30 s guard, which is harmless.
                 main.removeCallbacks(prepareTimeout);
-                main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
+                main.postDelayed(prepareTimeout, CLIP_PREPARE_TIMEOUT_MS);
                 android.util.Log.i("Veil", "seamless transition to: " + current.name);
             }
         }
@@ -245,8 +278,9 @@ final class VideoEngine {
                 player.setPlayWhenReady(true);
                 player.prepare();
                 prepareBegan = SystemClock.elapsedRealtime();
+                stillSince = SystemClock.elapsedRealtime();
                 main.removeCallbacks(prepareTimeout);
-                main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
+                main.postDelayed(prepareTimeout, CLIP_PREPARE_TIMEOUT_MS);
             } else {
                 // Already retried on the other transport: drop the dead clip and move on.
                 android.util.Log.w("Veil", "video retry also failed, dropping clip: " + bad.name);
@@ -255,8 +289,9 @@ final class VideoEngine {
                     player.removeMediaItem(idx);
                     queue.remove(idx);
                     prepareBegan = SystemClock.elapsedRealtime();
+                    stillSince = SystemClock.elapsedRealtime();
                     main.removeCallbacks(prepareTimeout);
-                    main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
+                    main.postDelayed(prepareTimeout, CLIP_PREPARE_TIMEOUT_MS);
                 } else {
                     failToStill("playback error " + e.getErrorCodeName());
                 }
@@ -282,6 +317,96 @@ final class VideoEngine {
             }
         }
     };
+
+    /** One heartbeat at a time: every restart cancels the queued one first. */
+    private void armTick() {
+        main.removeCallbacks(positionTick);
+        main.postDelayed(positionTick, POSITION_TICK_MS);
+    }
+
+    /** No rendered frame after a surface hand-off → the decoder is painting into a dead surface. */
+    private final Runnable handoffGuard = new Runnable() {
+        @Override
+        public void run() {
+            if (!awaitingHandoffFrame || !started) return;
+            // MainActivity has already flipped the SurfaceView GONE->VISIBLE, so the output is
+            // bound to a genuinely fresh surface. A live READY player means the hand-off worked;
+            // only a stalled engine needs a rebuild. onRenderedFirstFrame() clears the guard
+            // earlier on ROMs that do emit it — the guard must not depend on that callback.
+            if (playing && player != null
+                    && player.getPlaybackState() == Player.STATE_READY) {
+                awaitingHandoffFrame = false;
+                return;
+            }
+            android.util.Log.w("Veil", "handoff: no live picture within "
+                    + HANDOFF_GRACE_MS / 1000 + "s — rebuilding");
+            recoverPlayback("handoff without a live picture");
+        }
+    };
+
+    /**
+     * Clean rebuild after a silent stall. The still goes back up FIRST so recovery never shows
+     * a black hole; the decoder is dropped and the playlist re-prepared. A cooldown stops a bad
+     * network from rebuilding every few seconds.
+     */
+    private void recoverPlayback(String why) {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastRecoveryAt < RECOVERY_COOLDOWN_MS) {
+            android.util.Log.w("Veil", "recovery skipped (cooldown): " + why);
+            awaitingHandoffFrame = false;
+            return;
+        }
+        lastRecoveryAt = now;
+        android.util.Log.w("Veil", "video recovery: " + why);
+        main.removeCallbacks(prepareTimeout);
+        main.removeCallbacks(handoffGuard);
+        main.removeCallbacks(positionTick);
+        awaitingHandoffFrame = false;
+        timeoutHops = 0;
+        errorStreak = 0;
+        lastZombiePos = Long.MIN_VALUE;
+        zombieSince = 0L;
+        stillSince = 0L;
+        releasePlayer();
+        setPlaying(false);
+        notifyActive();   // re-assert the UI state even if setPlaying() short-circuited
+        WallpaperState.clear();
+        if (started) {
+            buildQueue();
+            awaitingHandoffFrame = true;
+            main.removeCallbacks(handoffGuard);
+            main.postDelayed(handoffGuard, HANDOFF_GRACE_MS);
+            armTick();
+        }
+    }
+
+    /**
+     * Desktop<->screensaver output switch. Detaching first makes ExoPlayer reconfigure its video
+     * output (and emit onRenderedFirstFrame) instead of silently keeping the surface the ROM
+     * reaped while the other activity was on top. MainActivity flips its SurfaceView too — it
+     * consumes that flag on its next onResume().
+     */
+    private void beginHandoff() {
+        if (player != null) {
+            try {
+                player.setVideoSurfaceHolder(null);
+            } catch (Exception ignore) {
+            }
+        }
+        applyStage();
+        awaitingHandoffFrame = true;
+        pendingSurfaceRebind = true;
+        main.removeCallbacks(handoffGuard);
+        main.postDelayed(handoffGuard, HANDOFF_GRACE_MS);
+        android.util.Log.i("Veil", "handoff: awaiting a rendered frame on the new surface");
+    }
+
+    /** MainActivity asks once, on its next resume, whether it must rebuild the video surface. */
+    boolean consumeSurfaceRebind() {
+        boolean v = pendingSurfaceRebind;
+        pendingSurfaceRebind = false;
+        return v;
+    }
 
     private VideoEngine() {
     }
@@ -750,6 +875,11 @@ final class VideoEngine {
         desktopListener = l;
         if (!dreamActive) {
             applyStage();
+            if (awaitingHandoffFrame) {
+                // A fresh surface just arrived: give the decoder a full grace window from here.
+                main.removeCallbacks(handoffGuard);
+                main.postDelayed(handoffGuard, HANDOFF_GRACE_MS);
+            }
             if (started && playing) notifyActive();
             else if (started && !playing && player == null) playRandom();
         }
@@ -782,9 +912,12 @@ final class VideoEngine {
         // resume while it is up) must NOT yank the output back to the desktop surface, which would
         // leave the saver showing only its black surface while the clip decodes unseen behind it.
         if (ScreensaverActivity.showing) return;
+        boolean wasDream = dreamActive;
         dreamActive = false;
         stage = Stage.DESKTOP;
-        applyStage();
+        held = false;
+        if (wasDream) beginHandoff();
+        else applyStage();
         // Back from a background hold (another app was in front, or the screensaver ended):
         // the player is parked in IDLE with the playlist and position kept — re-prepare the
         // same clip at the same spot. A ~1-2 s re-buffer beats both the old full teardown
@@ -807,9 +940,12 @@ final class VideoEngine {
 
     /** Switch the rendered output to the screensaver surface (dream begins). */
     void useDream() {
+        boolean wasDesktop = !dreamActive;
         dreamActive = true;
         stage = Stage.DREAM;
-        applyStage();
+        held = false;
+        if (wasDesktop) beginHandoff();
+        else applyStage();
         // Same background-hold resume as useDesktop(): the desktop parked the player in IDLE
         // when it went behind this screensaver — re-prepare the same clip at the same spot.
         if (player != null && started
@@ -856,6 +992,7 @@ final class VideoEngine {
     /** Begin (or resume) playback; a no-op until a surface is attached. */
     void start() {
         started = true;
+        held = false;
         SurfaceHolder h = dreamActive ? dreamHolder : desktopHolder;
         // player != null covers the preparing state too: two start() calls in quick succession
         // (onResume + a wallpaper refresh) used to race here, the second one releasing the
@@ -881,6 +1018,7 @@ final class VideoEngine {
      * The old full pause() is reserved for actually switching the video wallpaper off.
      */
     void backgroundHold() {
+        held = true;
         if (player == null) return;
         try {
             player.stop();   // decoder released, playbackState → IDLE, playlist & position kept
@@ -962,6 +1100,7 @@ final class VideoEngine {
             player.prepare();
             main.removeCallbacks(prepareTimeout);
             main.postDelayed(prepareTimeout, PREPARE_TIMEOUT_MS);
+            armTick();
         } catch (Exception e) {
             android.util.Log.w("Veil", "video queue start failed: " + e);
             failToStill(e.getMessage());
@@ -982,7 +1121,10 @@ final class VideoEngine {
         // the playing state first so the still wallpaper (or the bundled fallback in pure-video
         // mode) covers that window; STATE_READY flips it back with a cross-fade.
         setPlaying(false);
+        stillSince = SystemClock.elapsedRealtime();   // expected wait, not a stall
         prepareBegan = SystemClock.elapsedRealtime();
+        main.removeCallbacks(prepareTimeout);
+        main.postDelayed(prepareTimeout, CLIP_PREPARE_TIMEOUT_MS);
         if (step >= 0) player.seekToNextMediaItem();
         else player.seekToPreviousMediaItem();
     }
@@ -1008,7 +1150,30 @@ final class VideoEngine {
     private final Runnable positionTick = new Runnable() {
         @Override
         public void run() {
-            if (!started || player == null || !playing) return;
+            // The heartbeat must NEVER die while the engine is started. The old early return
+            // ended the tick chain the moment the still came up (re-buffer guard, hand-off, a
+            // clip hop), and only a NEW STATE_READY callback could restart it — which never
+            // arrives when the player is already READY but painting into a dead surface. That
+            // is the "stuck on the static wallpaper forever" report.
+            if (!started) return;   // engine off: stop the chain entirely
+            if (held) {             // desktop behind an opaque app: keep ticking, do nothing
+                main.postDelayed(this, POSITION_TICK_MS);
+                return;
+            }
+            long tickNow = SystemClock.elapsedRealtime();
+            if (player == null || !playing) {
+                long grace = player == null ? NO_PLAYER_STUCK_MS : STILL_STUCK_MS;
+                if (stillSince == 0L) stillSince = tickNow;
+                else if (tickNow - stillSince > grace) {
+                    stillSince = 0L;
+                    recoverPlayback(player == null ? "engine idle without a player"
+                            : "still up with a live player but no playing state");
+                    return;
+                }
+                main.postDelayed(this, POSITION_TICK_MS);
+                return;
+            }
+            stillSince = 0L;
             try {
                 // Re-buffer guard (seamless hand-off to an unbuffered clip, mid-clip CDN stall):
                 // the surface shows a black frame while playing=true suppresses the still. Once
@@ -1065,8 +1230,12 @@ final class VideoEngine {
         android.util.Log.w("Veil", "video fallback: " + why);
         timeoutHops = 0;
         errorStreak = 0;
+        awaitingHandoffFrame = false;
+        stillSince = 0L;
+        lastRecoveryAt = SystemClock.elapsedRealtime();   // let the 30 s retry own this recovery
         main.removeCallbacks(prepareTimeout);
         main.removeCallbacks(positionTick);
+        main.removeCallbacks(handoffGuard);
         releasePlayer();
         setPlaying(false);
         WallpaperState.clear();
@@ -1074,6 +1243,7 @@ final class VideoEngine {
         main.postDelayed(() -> {
             if (started && !playing) playRandom();
         }, RETRY_MS);
+        armTick();   // keep the heartbeat alive through the back-off window
     }
 
     private void notifyClip(String name) {

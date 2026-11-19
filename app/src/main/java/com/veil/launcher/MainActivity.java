@@ -218,8 +218,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final Runnable surfaceWatchdog = new Runnable() {
         @Override
         public void run() {
-            if (bgVideoView != null && videoShowing
-                    && VideoEngine.INSTANCE.isStarted()) {
+            // Watch the surface even while the still is up: a dead surface plus a stalled
+            // playing flag is exactly the black-desktop / frozen-still pair. Previously the
+            // watchdog only ran while videoShowing was true, so the stuck-still case was blind.
+            if (bgVideoView != null && VideoEngine.INSTANCE.isStarted()
+                    && !ScreensaverActivity.showing) {
                 android.view.Surface s = bgVideoView.getHolder().getSurface();
                 if (s == null || !s.isValid()) {
                     android.util.Log.w("Veil", "watchdog: playing but surface dead — rebuilding");
@@ -232,7 +235,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     }, 120L);
                 }
             }
-            handler.postDelayed(this, 5_000L);
+            handler.postDelayed(this, 3_000L);
         }
     };
     private boolean wallTransitioning;
@@ -1605,6 +1608,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // shared engine so the video keeps flowing on the desktop instead of restarting.
         VideoEngine.INSTANCE.init(this);
         VideoEngine.INSTANCE.useDesktop();
+        if (VideoEngine.INSTANCE.consumeSurfaceRebind() && bgVideoView != null) {
+            // A screensaver just handed the display back. TV ROMs often reap the desktop
+            // SurfaceView while it is stopped; force GONE->VISIBLE so surfaceCreated hands the
+            // engine a genuinely fresh surface instead of the dead one it was decoding into.
+            bgVideoView.setVisibility(View.GONE);
+            bgVideoView.postDelayed(() -> {
+                if (bgVideoView != null) bgVideoView.setVisibility(View.VISIBLE);
+            }, 120L);
+        }
         updateWallpaperVideo();
         // Silent, once-a-day update check on launch (no prompt unless a newer version exists).
         Updater.maybeAutoCheck(this);
