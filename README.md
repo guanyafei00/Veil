@@ -4,19 +4,19 @@ tvOS 风格的 Android TV / 盒子桌面（launcher）。纯 Java、原生 View�
 
 **基于 [Gathin23/cleanyourtv](https://github.com/Gathin23/cleanyourtv)（MIT）二次开发** —— 在其基础上做了大量修复、功能增强与界面重制。许可见 [LICENSE](LICENSE)，第三方声明见 [NOTICE.md](NOTICE.md)。
 
-当前版本：**v2.2.4 / versionCode 234**。
+当前版本：**v2.2.5 / versionCode 235**。
 
 ## 下载与安装
 
 | 安装包 | 体积 | 说明 |
 | --- | --- | --- |
-| [Veil-TV-full-v2.2.4.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-full-v2.2.4.apk) | 约 1.89 MiB | 离线兜底壁纸较高分辨率（约 850 KB） |
-| [Veil-TV-lite-v2.2.4.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-lite-v2.2.4.apk) | 约 1.30 MiB | 离线兜底壁纸较低分辨率（约 246 KB） |
+| [Veil-TV-full-v2.2.5.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.5/Veil-TV-full-v2.2.5.apk) | 约 1.89 MiB | 离线兜底壁纸较高分辨率（约 850 KB） |
+| [Veil-TV-lite-v2.2.5.apk](https://github.com/guanyafei00/Veil/releases/download/v2.2.5/Veil-TV-lite-v2.2.5.apk) | 约 1.30 MiB | 离线兜底壁纸较低分辨率（约 246 KB） |
 
 两包功能完全一致，**唯一差异是 `default_wallpaper.jpg` 的体积**；包名同为 `com.veil.launcher`，可互相覆盖安装。所有壁纸与视频源均在线拉取，安装包内不预置壁纸图库。
 
 ```bash
-adb install -r Veil-TV-lite-v2.2.4.apk
+adb install -r Veil-TV-lite-v2.2.5.apk
 ```
 
 > **签名**：所有发布包使用同一套签名，可相互覆盖安装。更换签名密钥会导致存量设备无法覆盖安装，请勿随意替换。
@@ -32,6 +32,12 @@ adb install -r Veil-TV-lite-v2.2.4.apk
 > **TCL 电视注意**：应用内自更新在部分 TCL ROM 上会被系统安装器的校验链拦截；已在 Veil 桌面且是默认桌面的设备通常可通过，首次安装仍需 adb / U 盘 / 文件管理器手动一步。
 
 ## 近期更新
+
+### v2.2.5 — 屏保切回黑屏修复
+
+- 修复从屏保切回桌面后长时间黑屏或停在大雁静图：切换时强制重建显示输出并加握手守卫，确认新画面真正渲染后才完成切换。
+- 心跳常驻，画面卡住时自动重建解码器；部分 ROM 不发首帧回调也能正确判定，不误判重建。
+- 死片准备超时缩短，减少无谓等待。T1 与 TCL 原生 ROM 均真机验证通过。
 
 ### v2.2.4 — 胶囊圆角与液态玻璃可读性
 

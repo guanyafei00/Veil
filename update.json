@@ -1,9 +1,9 @@
 {
-  "versionCode": 234,
-  "versionName": "2.2.4",
-  "notes": "右上角两个胶囊改为框架级裁切的真圆角，跨 ROM 不再出现方角；液态玻璃保持半透明材质，可读性改由白字柔和阴影承担，无图标（纯壁纸）桌面不再出现深色块；设置面板、对话框与选项列表文字统一提亮，聚焦态对比度同步修正；「检查更新」失败的通用提示改为简体中文。",
+  "versionCode": 235,
+  "versionName": "2.2.5",
+  "notes": "修复从屏保切回桌面后长时间黑屏或停在大雁静图：切换时强制重建显示输出并加握手守卫，确认新画面真正渲染；心跳常驻，卡住自动恢复解码器；死片准备超时缩短，减少等待。T1 与 TCL 原生 ROM 均真机验证通过。",
   "mandatory": false,
-  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-full-v2.2.4.apk",
-  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-full-v2.2.4.apk",
-  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.4/Veil-TV-lite-v2.2.4.apk"
+  "apkUrl": "https://github.com/guanyafei00/Veil/releases/download/v2.2.5/Veil-TV-full-v2.2.5.apk",
+  "apkUrlFull": "https://github.com/guanyafei00/Veil/releases/download/v2.2.5/Veil-TV-full-v2.2.5.apk",
+  "apkUrlLite": "https://github.com/guanyafei00/Veil/releases/download/v2.2.5/Veil-TV-lite-v2.2.5.apk"
 }
